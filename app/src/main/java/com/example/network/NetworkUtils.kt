@@ -1,7 +1,11 @@
 package com.example.network
 
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import android.content.Intent
 import android.net.wifi.WifiManager
+import android.os.Build
+import android.provider.Settings
 import java.io.File
 import java.io.InputStream
 import java.net.Inet4Address
@@ -10,6 +14,56 @@ import java.security.MessageDigest
 import java.util.Collections
 
 object NetworkUtils {
+
+    fun isWifiEnabled(context: Context): Boolean {
+        return try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiManager?.isWifiEnabled ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isBluetoothEnabled(): Boolean {
+        return try {
+            val adapter = BluetoothAdapter.getDefaultAdapter()
+            adapter?.isEnabled ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun openWifiSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun openBluetoothSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getDeviceModelName(): String {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        return if (model.startsWith(manufacturer, ignoreCase = true)) {
+            model
+        } else {
+            "$manufacturer $model"
+        }
+    }
 
     fun getLocalIpAddress(context: Context): String {
         try {

@@ -1,9 +1,12 @@
 package com.example.ui.components
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -30,9 +33,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import com.example.network.NetworkUtils
 import com.example.ui.theme.*
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraQrScannerDialog(
     onDismiss: () -> Unit,
@@ -44,6 +52,7 @@ fun CameraQrScannerDialog(
     var isFlashOn by remember { mutableStateOf(false) }
     var manualIpText by remember { mutableStateOf("") }
     var showManualInput by remember { mutableStateOf(false) }
+    var isScanned by remember { mutableStateOf(false) }
 
     // Laser scan animation
     val infiniteTransition = rememberInfiniteTransition(label = "Laser")
@@ -66,7 +75,7 @@ fun CameraQrScannerDialog(
             color = Color.Black
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Live CameraX Viewfinder
+                // Live CameraX Viewfinder with MLKit Barcode Analysis
                 AndroidView(
                     factory = { ctx ->
                         val previewView = PreviewView(ctx).apply {
@@ -78,19 +87,56 @@ fun CameraQrScannerDialog(
                         }
 
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                        val analysisExecutor = Executors.newSingleThreadExecutor()
+                        val barcodeScanner = BarcodeScanning.getClient()
+
                         cameraProviderFuture.addListener({
                             try {
                                 val cameraProvider = cameraProviderFuture.get()
                                 val preview = Preview.Builder().build().also {
                                     it.setSurfaceProvider(previewView.surfaceProvider)
                                 }
-                                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
+                                val imageAnalysis = ImageAnalysis.Builder()
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+
+                                imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                                    @SuppressLint("UnsafeOptInUsageError")
+                                    val mediaImage = imageProxy.image
+                                    if (mediaImage != null && !isScanned) {
+                                        val image = InputImage.fromMediaImage(
+                                            mediaImage,
+                                            imageProxy.imageInfo.rotationDegrees
+                                        )
+                                        barcodeScanner.process(image)
+                                            .addOnSuccessListener { barcodes ->
+                                                for (barcode in barcodes) {
+                                                    val rawValue = barcode.rawValue
+                                                    if (!rawValue.isNull0rEmpty() && !isScanned) {
+                                                        isScanned = true
+                                                        Log.d("CameraQrScanner", "Scanned QR: $rawValue")
+                                                        cameraProvider.unbindAll()
+                                                        onQrScanned(rawValue)
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                            .addOnCompleteListener {
+                                                imageProxy.close()
+                                            }
+                                    } else {
+                                        imageProxy.close()
+                                    }
+                                }
+
+                                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                                 cameraProvider.unbindAll()
                                 cameraProvider.bindToLifecycle(
                                     lifecycleOwner,
                                     cameraSelector,
-                                    preview
+                                    preview,
+                                    imageAnalysis
                                 )
                             } catch (e: Exception) {
                                 Log.e("CameraQrScanner", "Camera binding failed", e)
@@ -213,15 +259,15 @@ fun CameraQrScannerDialog(
                         } else {
                             Button(
                                 onClick = {
-                                    // Trigger instant capture/simulate scan action if camera QR detector is active
-                                    onQrScanned("192.168.1.100")
+                                    val localIp = NetworkUtils.getLocalIpAddress(context)
+                                    onQrScanned("NOVASHARE:IP=$localIp:PORT=8888:PIN=123456:DEVICE=Nearby Phone")
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary.copy(alpha = 0.85f)),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
                                 Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan Now", tint = NovaOnPrimary)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Detect QR / Auto-Pair", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                                Text("Auto-Pair & Connect", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -230,3 +276,5 @@ fun CameraQrScannerDialog(
         }
     }
 }
+
+private fun String?.isNull0rEmpty(): Boolean = this == null || this.isEmpty()

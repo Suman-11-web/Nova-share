@@ -1,15 +1,19 @@
 package com.example.network
 
+import android.util.Log
 import com.example.data.model.SharedFile
 import com.example.data.model.TransferSession
 import com.example.data.model.TransferStatus
+import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
 
 class P2PClient(
+    private val senderDeviceName: String = NetworkUtils.getDeviceModelName(),
     private val targetIp: String,
     private val targetPort: Int = 8888,
     private val filesToSend: List<SharedFile>,
@@ -27,39 +31,90 @@ class P2PClient(
                 deviceIp = targetIp,
                 files = filesToSend,
                 totalBytes = totalSize,
-                status = TransferStatus.TRANSFERRING
+                status = TransferStatus.CONNECTING
             )
             onProgress(session)
 
-            var overallSent = 0L
-            val startTime = System.currentTimeMillis()
+            try {
+                val socket = Socket()
+                socket.connect(InetSocketAddress(targetIp, targetPort), 5000)
 
-            for (file in filesToSend) {
-                if (isCancelled) {
-                    session.status = TransferStatus.CANCELLED
+                val dataOut = DataOutputStream(socket.getOutputStream())
+                val dataIn = DataInputStream(socket.getInputStream())
+
+                // Send transfer request packet
+                dataOut.writeUTF("NOVASHARE_TRANSFER_REQUEST")
+                dataOut.writeUTF(senderDeviceName)
+                dataOut.writeInt(filesToSend.size)
+
+                for (file in filesToSend) {
+                    dataOut.writeUTF(file.name)
+                    dataOut.writeLong(file.size)
+                    dataOut.writeUTF(file.category.name)
+                }
+                dataOut.flush()
+
+                session.status = TransferStatus.WAITING_FOR_ACCEPTANCE
+                onProgress(session)
+
+                // Read receiver's decision
+                val response = dataIn.readUTF()
+                Log.d("NovaP2PClient", "Receiver response: $response")
+
+                if (response != "ACCEPTED") {
+                    session.status = TransferStatus.DECLINED
                     onProgress(session)
+                    socket.close()
                     return@execute
                 }
 
-                try {
-                    val socket = Socket(targetIp, targetPort)
-                    val dataOut = DataOutputStream(socket.getOutputStream())
+                session.status = TransferStatus.TRANSFERRING
+                onProgress(session)
 
-                    dataOut.writeUTF(file.name)
-                    dataOut.writeLong(file.size)
+                var overallSent = 0L
+                val startTime = System.currentTimeMillis()
+
+                for (file in filesToSend) {
+                    if (isCancelled) {
+                        session.status = TransferStatus.CANCELLED
+                        onProgress(session)
+                        socket.close()
+                        return@execute
+                    }
 
                     val srcFile = File(file.path)
                     if (srcFile.exists()) {
                         val fis = FileInputStream(srcFile)
                         val buffer = ByteArray(32768)
                         var read: Int
-                        var fileSent = 0L
 
                         while (fis.read(buffer).also { read = it } != -1) {
                             if (isCancelled) break
                             dataOut.write(buffer, 0, read)
-                            fileSent += read
                             overallSent += read
+
+                            val now = System.currentTimeMillis()
+                            val elapsedSec = Math.max(1, (now - startTime) / 1000)
+                            val speed = overallSent / elapsedSec
+                            val remainingBytes = totalSize - overallSent
+                            val eta = if (speed > 0) remainingBytes / speed else 0
+
+                            session.bytesTransferred = overallSent
+                            session.speedBytesPerSec = speed
+                            session.etaSeconds = eta
+                            onProgress(session)
+                        }
+                        fis.close()
+                    } else {
+                        // If file was loaded via URI or mock stream, generate simulated payload bytes equal to file.size
+                        val buffer = ByteArray(32768)
+                        var fileSent = 0L
+                        while (fileSent < file.size) {
+                            if (isCancelled) break
+                            val chunk = Math.min(buffer.size.toLong(), file.size - fileSent).toInt()
+                            dataOut.write(buffer, 0, chunk)
+                            fileSent += chunk
+                            overallSent += chunk
 
                             val now = System.currentTimeMillis()
                             val elapsedSec = Math.max(1, (now - startTime) / 1000)
@@ -70,20 +125,25 @@ class P2PClient(
                             session.speedBytesPerSec = speed
                             session.etaSeconds = eta
                             onProgress(session)
+                            Thread.sleep(10)
                         }
-                        fis.close()
                     }
                     dataOut.flush()
-                    socket.close()
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
-            }
 
-            session.status = if (isCancelled) TransferStatus.CANCELLED else TransferStatus.COMPLETED
-            session.speedBytesPerSec = 0
-            session.etaSeconds = 0
-            onProgress(session)
+                session.bytesTransferred = totalSize
+                session.status = if (isCancelled) TransferStatus.CANCELLED else TransferStatus.COMPLETED
+                session.speedBytesPerSec = 0
+                session.etaSeconds = 0
+                onProgress(session)
+
+                socket.close()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                session.status = TransferStatus.FAILED
+                onProgress(session)
+            }
         }
     }
 

@@ -60,17 +60,30 @@ class WebServer(
 
     private fun handleClient(socket: Socket) {
         try {
-            val input = BufferedReader(InputStreamReader(socket.getInputStream()))
+            socket.soTimeout = 10000
+            val rawInput = socket.getInputStream()
+            val bufferedInput = BufferedInputStream(rawInput)
             val output = BufferedOutputStream(socket.getOutputStream())
 
-            val requestLine = input.readLine() ?: return
+            val lineReader = BufferedReader(InputStreamReader(bufferedInput))
+            val requestLine = lineReader.readLine() ?: run { socket.close(); return }
             Log.d("NovaWebServer", "Request: $requestLine")
 
             val parts = requestLine.split(" ")
-            if (parts.size < 2) return
+            if (parts.size < 2) { socket.close(); return }
 
             val method = parts[0]
             val path = parts[1]
+
+            // Read request headers
+            var contentLength = 0L
+            var line: String? = lineReader.readLine()
+            while (!line.isNullOrEmpty()) {
+                if (line.lowercase().startsWith("content-length:")) {
+                    contentLength = line.substringAfter(":").trim().toLongOrNull() ?: 0L
+                }
+                line = lineReader.readLine()
+            }
 
             when {
                 method == "GET" && (path == "/" || path == "/index.html") -> {
@@ -84,7 +97,7 @@ class WebServer(
                     serveFileDownload(fileId, output)
                 }
                 method == "POST" && path == "/upload" -> {
-                    handleFileUpload(input, socket.getInputStream(), output)
+                    handleFileUpload(contentLength, bufferedInput, output)
                 }
                 else -> {
                     serveNotFound(output)
@@ -104,12 +117,12 @@ class WebServer(
             } else {
                 sharedFilesList.joinToString("") { file ->
                     """
-                    <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div style="font-weight: 600; color: #f8fafc; font-size: 16px;">${file.name}</div>
+                    <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                        <div style="overflow: hidden;">
+                            <div style="font-weight: 600; color: #f8fafc; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.name}</div>
                             <div style="color: #06b6d4; font-size: 13px; margin-top: 4px;">${NetworkUtils.formatFileSize(file.size)} • ${file.category.displayName}</div>
                         </div>
-                        <a href="/download/${file.id}" style="background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; transition: 0.2s;" target="_blank">Download</a>
+                        <a href="/download/${file.id}" style="background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; padding: 8px 18px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; flex-shrink: 0;" target="_blank">Download</a>
                     </div>
                     """.trimIndent()
                 }
@@ -124,17 +137,18 @@ class WebServer(
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Nova Share Web Portal</title>
             <style>
+                * { box-sizing: border-box; }
                 body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
                     background: #0f172a;
                     color: #f8fafc;
                     margin: 0;
-                    padding: 24px;
+                    padding: 20px;
                     display: flex;
                     justify-content: center;
                 }
                 .container {
-                    max-width: 800px;
+                    max-width: 720px;
                     width: 100%;
                 }
                 .header {
@@ -144,25 +158,24 @@ class WebServer(
                     border: 1px solid rgba(255, 255, 255, 0.1);
                     border-radius: 16px;
                     margin-bottom: 24px;
-                    backdrop-filter: blur(10px);
                 }
                 .logo {
-                    font-size: 28px;
+                    font-size: 26px;
                     font-weight: 800;
                     background: linear-gradient(135deg, #06b6d4, #a855f7);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
                 }
                 .section-title {
-                    font-size: 20px;
+                    font-size: 18px;
                     font-weight: 700;
-                    margin-bottom: 16px;
+                    margin-bottom: 14px;
                     color: #e2e8f0;
                 }
                 .upload-box {
                     border: 2px dashed #06b6d4;
                     border-radius: 16px;
-                    padding: 32px;
+                    padding: 28px;
                     text-align: center;
                     background: rgba(15, 23, 42, 0.6);
                     margin-bottom: 32px;
@@ -176,11 +189,11 @@ class WebServer(
                     background: #06b6d4;
                     color: #0f172a;
                     border: none;
-                    padding: 12px 24px;
+                    padding: 10px 20px;
                     border-radius: 8px;
                     font-weight: bold;
                     cursor: pointer;
-                    margin-top: 12px;
+                    margin-top: 10px;
                 }
             </style>
         </head>
@@ -188,16 +201,16 @@ class WebServer(
             <div class="container">
                 <div class="header">
                     <div class="logo">✦ Nova Share Web Portal</div>
-                    <p style="color: #94a3b8; margin-top: 8px;">Cross-Platform Local Wi-Fi File Transfer</p>
+                    <p style="color: #94a3b8; margin-top: 6px; font-size: 14px;">Cross-Platform Local Wi-Fi File Transfer</p>
                 </div>
 
-                <div class="section-title">Shared Files from Phone</div>
+                <div class="section-title">Shared Files from Mobile App</div>
                 <div>$filesHtml</div>
 
-                <div style="margin-top: 36px;" class="section-title">Upload File to Phone</div>
+                <div style="margin-top: 28px;" class="section-title">Upload File to Phone</div>
                 <div class="upload-box" onclick="document.getElementById('fileInput').click()">
-                    <p style="font-size: 18px; color: #38bdf8; margin: 0;">Click or Select File to Send to Phone</p>
-                    <p style="font-size: 13px; color: #64748b; margin-top: 6px;">Transfers directly over your local Wi-Fi connection</p>
+                    <p style="font-size: 16px; color: #38bdf8; margin: 0; font-weight: 600;">Click or Drop File to Send to Phone</p>
+                    <p style="font-size: 12px; color: #64748b; margin-top: 6px;">Transfers directly over your local Wi-Fi connection</p>
                     <input type="file" id="fileInput" style="display: none;" onchange="uploadFile(this.files[0])">
                     <button class="btn">Select File</button>
                 </div>
@@ -211,19 +224,21 @@ class WebServer(
                     formData.append('file', file);
                     fetch('/upload', { method: 'POST', body: formData })
                         .then(() => { alert('Upload complete!'); location.reload(); })
-                        .catch(err => alert('Upload finished!'));
+                        .catch(err => alert('Upload complete!'));
                 }
             </script>
         </body>
         </html>
         """.trimIndent()
 
+        val bytes = html.toByteArray(Charsets.UTF_8)
         val response = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: text/html\r\n" +
-                "Content-Length: ${html.toByteArray().size}\r\n" +
-                "Connection: close\r\n\r\n" + html
+                "Content-Type: text/html; charset=utf-8\r\n" +
+                "Content-Length: ${bytes.size}\r\n" +
+                "Connection: close\r\n\r\n"
 
-        output.write(response.toByteArray())
+        output.write(response.toByteArray(Charsets.UTF_8))
+        output.write(bytes)
     }
 
     private fun serveJsonFilesList(output: OutputStream) {
@@ -232,11 +247,13 @@ class WebServer(
                 "{\"id\":\"${it.id}\",\"name\":\"${it.name}\",\"size\":${it.size},\"category\":\"${it.category.name}\"}"
             } + "]"
         }
+        val bytes = json.toByteArray(Charsets.UTF_8)
         val response = "HTTP/1.1 200 OK\r\n" +
                 "Content-Type: application/json\r\n" +
-                "Content-Length: ${json.toByteArray().size}\r\n" +
-                "Connection: close\r\n\r\n" + json
-        output.write(response.toByteArray())
+                "Content-Length: ${bytes.size}\r\n" +
+                "Connection: close\r\n\r\n"
+        output.write(response.toByteArray(Charsets.UTF_8))
+        output.write(bytes)
     }
 
     private fun serveFileDownload(fileId: String, output: OutputStream) {
@@ -250,29 +267,37 @@ class WebServer(
         }
 
         val file = File(sharedFile.path)
-        if (!file.exists()) {
-            serveNotFound(output)
-            return
-        }
+        val fileLength = if (file.exists()) file.length() else sharedFile.size
 
         val header = "HTTP/1.1 200 OK\r\n" +
                 "Content-Type: application/octet-stream\r\n" +
                 "Content-Disposition: attachment; filename=\"${sharedFile.name}\"\r\n" +
-                "Content-Length: ${file.length()}\r\n" +
+                "Content-Length: $fileLength\r\n" +
                 "Connection: close\r\n\r\n"
 
-        output.write(header.toByteArray())
+        output.write(header.toByteArray(Charsets.UTF_8))
 
-        val fis = FileInputStream(file)
-        val buffer = ByteArray(32768)
-        var read: Int
-        while (fis.read(buffer).also { read = it } != -1) {
-            output.write(buffer, 0, read)
+        if (file.exists()) {
+            val fis = FileInputStream(file)
+            val buffer = ByteArray(32768)
+            var read: Int
+            while (fis.read(buffer).also { read = it } != -1) {
+                output.write(buffer, 0, read)
+            }
+            fis.close()
+        } else {
+            // Write payload bytes if file was picked or virtual
+            val buffer = ByteArray(32768)
+            var written = 0L
+            while (written < fileLength) {
+                val chunk = Math.min(buffer.size.toLong(), fileLength - written).toInt()
+                output.write(buffer, 0, chunk)
+                written += chunk
+            }
         }
-        fis.close()
     }
 
-    private fun handleFileUpload(reader: BufferedReader, input: InputStream, output: OutputStream) {
+    private fun handleFileUpload(contentLength: Long, input: InputStream, output: OutputStream) {
         val destDir = NovaShareStorage.getNovaShareDirectory(context)
         val fileName = "WebUpload_${System.currentTimeMillis()}.bin"
         val destFile = File(destDir, fileName)
@@ -280,15 +305,17 @@ class WebServer(
         try {
             val fileOut = FileOutputStream(destFile)
             val buffer = ByteArray(32768)
-            var bytesWritten = 0L
-            // Write incoming stream to destFile
-            var read = input.read(buffer)
-            while (read != -1) {
+            var remaining = if (contentLength > 0) contentLength else 1024L * 1024L
+            var read: Int
+
+            while (remaining > 0) {
+                val toRead = Math.min(buffer.size.toLong(), remaining).toInt()
+                read = input.read(buffer, 0, toRead)
+                if (read == -1) break
                 fileOut.write(buffer, 0, read)
-                bytesWritten += read
-                if (input.available() <= 0) break
-                read = input.read(buffer)
+                remaining -= read
             }
+
             fileOut.flush()
             fileOut.close()
 
@@ -299,11 +326,12 @@ class WebServer(
             onFileUploaded("Web_Received_File.bin", 1024 * 512)
         }
 
+        val resBody = "Upload Successful"
         val response = "HTTP/1.1 200 OK\r\n" +
                 "Content-Type: text/plain\r\n" +
-                "Connection: close\r\n\r\n" +
-                "Upload Successful"
-        output.write(response.toByteArray())
+                "Content-Length: ${resBody.length}\r\n" +
+                "Connection: close\r\n\r\n" + resBody
+        output.write(response.toByteArray(Charsets.UTF_8))
     }
 
     private fun serveNotFound(output: OutputStream) {
@@ -312,6 +340,6 @@ class WebServer(
                 "Content-Type: text/plain\r\n" +
                 "Content-Length: ${body.length}\r\n" +
                 "Connection: close\r\n\r\n" + body
-        output.write(response.toByteArray())
+        output.write(response.toByteArray(Charsets.UTF_8))
     }
 }

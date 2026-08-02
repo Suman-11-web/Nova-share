@@ -3,6 +3,8 @@ package com.example.ui.screens.receive
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,20 +18,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.network.NetworkUtils
 import com.example.ui.components.QRCodeCanvas
 import com.example.ui.components.TransferProgressCard
-import com.example.ui.screens.receive.ReceiveViewModel
-import com.example.ui.theme.NovaDarkBackground
-import com.example.ui.theme.NovaDarkOutline
-import com.example.ui.theme.NovaDarkSurface
-import com.example.ui.theme.NovaDarkSurfaceVariant
-import com.example.ui.theme.NovaError
-import com.example.ui.theme.NovaOnPrimary
-import com.example.ui.theme.NovaPrimary
-import com.example.ui.theme.NovaSecondary
-import com.example.ui.theme.NovaTextMuted
-import com.example.ui.theme.NovaTextPrimary
-import com.example.ui.theme.NovaTextSecondary
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,21 +29,37 @@ fun ReceiveScreen(
     viewModel: ReceiveViewModel
 ) {
     val context = LocalContext.current
+
+    var wifiEnabled by remember { mutableStateOf(NetworkUtils.isWifiEnabled(context)) }
+    var bluetoothEnabled by remember { mutableStateOf(NetworkUtils.isBluetoothEnabled()) }
+
     LaunchedEffect(Unit) {
         viewModel.updateLocalIp(context)
+        wifiEnabled = NetworkUtils.isWifiEnabled(context)
+        bluetoothEnabled = NetworkUtils.isBluetoothEnabled()
     }
 
     val localIp by viewModel.localIp.collectAsState()
     val pairingPin by viewModel.pairingPin.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
     val incomingSession by viewModel.incomingSession.collectAsState()
+    val pendingRequest by viewModel.pendingRequest.collectAsState()
 
-    val qrData = "NOVASHARE:IP=$localIp:PORT=8888:PIN=$pairingPin"
+    val qrData = "NOVASHARE:IP=$localIp:PORT=8888:PIN=$pairingPin:DEVICE=${NetworkUtils.getDeviceModelName()}"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(text = "Receive Files", fontWeight = FontWeight.ExtraBold, color = NovaTextPrimary) },
+                actions = {
+                    IconButton(onClick = {
+                        wifiEnabled = NetworkUtils.isWifiEnabled(context)
+                        bluetoothEnabled = NetworkUtils.isBluetoothEnabled()
+                        viewModel.updateLocalIp(context)
+                    }) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh Connectivity", tint = NovaPrimary)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = NovaDarkBackground)
             )
         },
@@ -64,6 +72,73 @@ fun ReceiveScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Connectivity Status Banner (Wi-Fi & Bluetooth)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = NovaDarkSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Wi-Fi Status
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (wifiEnabled) Icons.Default.Wifi else Icons.Default.WifiOff,
+                                contentDescription = "Wi-Fi",
+                                tint = if (wifiEnabled) NovaPrimary else NovaError,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (wifiEnabled) "Wi-Fi On" else "Wi-Fi Off",
+                                color = NovaTextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Bluetooth Status
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (bluetoothEnabled) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
+                                contentDescription = "Bluetooth",
+                                tint = if (bluetoothEnabled) NovaSecondary else NovaError,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (bluetoothEnabled) "Bluetooth On" else "Bluetooth Off",
+                                color = NovaTextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (!wifiEnabled || !bluetoothEnabled) {
+                        TextButton(
+                            onClick = {
+                                if (!wifiEnabled) NetworkUtils.openWifiSettings(context)
+                                else NetworkUtils.openBluetoothSettings(context)
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(text = "Turn On", color = NovaPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
             // Pairing QR Code Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -72,25 +147,25 @@ fun ReceiveScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Scan QR to Pair & Send",
+                        text = "Scan QR to Pair & Connect",
                         color = NovaTextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Open Nova Share on sender phone or camera to connect",
+                        text = "Open Nova Share scanner on sender phone to connect automatically",
                         color = NovaTextSecondary,
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                     )
 
                     QRCodeCanvas(qrContent = qrData, size = 180.dp, backgroundColor = NovaDarkSurfaceVariant)
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // IP & PIN display
                     Row(
@@ -114,12 +189,12 @@ fun ReceiveScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Incoming Progress Card
             incomingSession?.let { session ->
                 TransferProgressCard(session = session)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // Radar Status Action Button
@@ -179,32 +254,131 @@ fun ReceiveScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.FolderSpecial,
                         contentDescription = "Save Directory",
                         tint = NovaPrimary,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
                             text = "Save Location",
                             color = NovaTextMuted,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "Main Storage / Download / Nova-share",
                             color = NovaTextPrimary,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
         }
+    }
+
+    // ACCEPT / DECLINE INCOMING TRANSFER REQUEST DIALOG
+    pendingRequest?.let { req ->
+        AlertDialog(
+            onDismissRequest = { viewModel.declineTransfer() },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.SendToMobile,
+                    contentDescription = "Incoming Request",
+                    tint = NovaPrimary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Incoming File Transfer",
+                    color = NovaTextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "${req.deviceName} wants to send you files over local Wi-Fi:",
+                        color = NovaTextSecondary,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = NovaDarkSurfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Total Files: ${req.files.size.coerceAtLeast(1)}",
+                                    color = NovaPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = NetworkUtils.formatFileSize(req.totalBytes),
+                                    color = NovaSecondary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            req.files.take(3).forEach { file ->
+                                Text(
+                                    text = "• ${file.name}",
+                                    color = NovaTextPrimary,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                            }
+                            if (req.files.size > 3) {
+                                Text(
+                                    text = "...and ${req.files.size - 3} more file(s)",
+                                    color = NovaTextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.acceptTransfer() },
+                    colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Accept", tint = NovaOnPrimary)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Accept & Download", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { viewModel.declineTransfer() },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NovaError),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NovaError)
+                ) {
+                    Icon(imageVector = Icons.Default.Cancel, contentDescription = "Decline", tint = NovaError)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Decline", color = NovaError, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = NovaDarkSurface,
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }

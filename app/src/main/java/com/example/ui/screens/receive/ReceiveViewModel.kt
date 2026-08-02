@@ -20,6 +20,7 @@ class ReceiveViewModel(
 ) : ViewModel() {
 
     private var p2pServer: P2PServer? = null
+    private var pendingDecisionCallback: ((Boolean) -> Unit)? = null
 
     private val _localIp = MutableStateFlow("127.0.0.1")
     val localIp: StateFlow<String> = _localIp.asStateFlow()
@@ -32,6 +33,9 @@ class ReceiveViewModel(
 
     private val _incomingSession = MutableStateFlow<TransferSession?>(null)
     val incomingSession: StateFlow<TransferSession?> = _incomingSession.asStateFlow()
+
+    private val _pendingRequest = MutableStateFlow<TransferSession?>(null)
+    val pendingRequest: StateFlow<TransferSession?> = _pendingRequest.asStateFlow()
 
     fun updateLocalIp(context: Context) {
         val ip = NetworkUtils.getLocalIpAddress(context)
@@ -61,6 +65,11 @@ class ReceiveViewModel(
             context = context,
             port = 8888,
             outputDir = saveDir,
+            onTransferRequested = { session, decisionCallback ->
+                pendingDecisionCallback = decisionCallback
+                _pendingRequest.value = session
+                _incomingSession.value = session
+            },
             onTransferUpdated = { session ->
                 _incomingSession.value = session
 
@@ -91,6 +100,19 @@ class ReceiveViewModel(
             start()
         }
         _isListening.value = true
+    }
+
+    fun acceptTransfer() {
+        pendingDecisionCallback?.invoke(true)
+        pendingDecisionCallback = null
+        _pendingRequest.value = null
+    }
+
+    fun declineTransfer() {
+        pendingDecisionCallback?.invoke(false)
+        pendingDecisionCallback = null
+        _pendingRequest.value = null
+        _incomingSession.value = null
     }
 
     fun stopListening() {
