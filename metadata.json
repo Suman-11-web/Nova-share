@@ -1,0 +1,6 @@
+{
+  "name": "Nova Share",
+  "description": "Modern open-source cross-platform Android file sharing app for fast P2P and Web transfers",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

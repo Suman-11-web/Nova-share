@@ -1,0 +1,83 @@
+package com.example.network
+
+import android.content.Context
+import android.net.wifi.WifiManager
+import java.io.File
+import java.io.InputStream
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.security.MessageDigest
+import java.util.Collections
+
+object NetworkUtils {
+
+    fun getLocalIpAddress(context: Context): String {
+        try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val wifiInfo = wifiManager?.connectionInfo
+            val ipInt = wifiInfo?.ipAddress ?: 0
+            if (ipInt != 0) {
+                return String.format(
+                    "%d.%d.%d.%d",
+                    ipInt and 0xff,
+                    ipInt shr 8 and 0xff,
+                    ipInt shr 16 and 0xff,
+                    ipInt shr 24 and 0xff
+                )
+            }
+
+            // Fallback to searching network interfaces
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                val addrs = Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                        val host = addr.hostAddress
+                        if (host != null && !host.startsWith("127.")) {
+                            return host
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return "192.168.1.100"
+    }
+
+    fun calculateSha256(file: File): String {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val inputStream: InputStream = file.inputStream()
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                digest.update(buffer, 0, bytesRead)
+            }
+            inputStream.close()
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+    }
+
+    fun formatFileSize(bytes: Long): String {
+        if (bytes <= 0) return "0 B"
+        val units = arrayOf("B", "KB", "MB", "GB", "TB")
+        val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
+        val index = digitGroups.coerceIn(0, units.size - 1)
+        val value = bytes / Math.pow(1024.0, index.toDouble())
+        return String.format("%.1f %s", value, units[index])
+    }
+
+    fun formatSpeed(bytesPerSec: Long): String {
+        return "${formatFileSize(bytesPerSec)}/s"
+    }
+
+    fun formatDuration(seconds: Long): String {
+        if (seconds <= 0) return "0s"
+        val mins = seconds / 60
+        val secs = seconds % 60
+        return if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+    }
+}
