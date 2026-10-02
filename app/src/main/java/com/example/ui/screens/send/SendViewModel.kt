@@ -30,8 +30,11 @@ class SendViewModel(
     private val _selectedCategory = MutableStateFlow(FileCategory.ALL)
     val selectedCategory: StateFlow<FileCategory> = _selectedCategory.asStateFlow()
 
-    private val _availableFiles = MutableStateFlow<List<SharedFile>>(emptyList())
-    val availableFiles: StateFlow<List<SharedFile>> = _availableFiles.asStateFlow()
+    private val _pickedFiles = MutableStateFlow<List<SharedFile>>(emptyList())
+    val pickedFiles: StateFlow<List<SharedFile>> = _pickedFiles.asStateFlow()
+
+    // Backward-compatible alias for existing references
+    val availableFiles: StateFlow<List<SharedFile>> = _pickedFiles.asStateFlow()
 
     private val _selectedFiles = MutableStateFlow<List<SharedFile>>(emptyList())
     val selectedFiles: StateFlow<List<SharedFile>> = _selectedFiles.asStateFlow()
@@ -101,31 +104,50 @@ class SendViewModel(
     fun loadRealDeviceFiles(context: Context) {
         getOrCreateManager(context)
         viewModelScope.launch(Dispatchers.IO) {
-            val loadedFiles = when (_selectedCategory.value) {
-                FileCategory.APK -> com.example.util.ApkExtractor.getInstalledSharedFiles(context)
-                FileCategory.ALL -> {
-                    val media = DeviceFileUtils.queryMediaStoreFiles(context, FileCategory.ALL)
-                    val apks = com.example.util.ApkExtractor.getInstalledSharedFiles(context).take(15)
-                    media + apks
+            // When user taps Scan, scan recent downloaded/received files to suggest for sending
+            val scanned = DeviceFileUtils.queryMediaStoreFiles(context, FileCategory.ALL).take(20)
+            val current = _pickedFiles.value.toMutableList()
+            for (f in scanned) {
+                if (current.none { it.id == f.id || (it.name == f.name && it.size == f.size) }) {
+                    current.add(f)
                 }
-                else -> DeviceFileUtils.queryMediaStoreFiles(context, _selectedCategory.value)
             }
-            val existingPicked = _availableFiles.value.filter { it.uri != null }
-            val combined = (existingPicked + loadedFiles).distinctBy { it.id }
-            _availableFiles.value = combined
+            _pickedFiles.value = current
+            // Auto select newly scanned
+            val selected = _selectedFiles.value.toMutableList()
+            selected.addAll(scanned)
+            _selectedFiles.value = selected.distinctBy { it.id }
         }
     }
 
     fun addPickedUris(context: Context, uris: List<Uri>) {
         viewModelScope.launch(Dispatchers.IO) {
             val parsedFiles = DeviceFileUtils.parsePickedUris(context, uris)
-            val updated = (_availableFiles.value + parsedFiles).distinctBy { it.id }
-            _availableFiles.value = updated
+            val updated = (_pickedFiles.value + parsedFiles).distinctBy { it.id }
+            _pickedFiles.value = updated
 
             val currentSelected = _selectedFiles.value.toMutableList()
             currentSelected.addAll(parsedFiles)
             _selectedFiles.value = currentSelected.distinctBy { it.id }
         }
+    }
+
+    fun removePickedFile(file: SharedFile) {
+        _pickedFiles.value = _pickedFiles.value.filter { it.id != file.id }
+        _selectedFiles.value = _selectedFiles.value.filter { it.id != file.id }
+    }
+
+    fun clearAllPickedFiles() {
+        _pickedFiles.value = emptyList()
+        _selectedFiles.value = emptyList()
+    }
+
+    fun selectAllPickedFiles() {
+        _selectedFiles.value = _pickedFiles.value
+    }
+
+    fun deselectAllPickedFiles() {
+        _selectedFiles.value = emptyList()
     }
 
     fun toggleFileSelection(file: SharedFile) {

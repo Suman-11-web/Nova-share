@@ -39,11 +39,16 @@ class P2PClient(
             onProgress(session)
 
             try {
-                val socket = Socket()
-                socket.connect(InetSocketAddress(targetIp, targetPort), 5000)
+                val socket = Socket().apply {
+                    tcpNoDelay = true
+                    try { sendBufferSize = 1048576 } catch (_: Exception) {}
+                    try { receiveBufferSize = 1048576 } catch (_: Exception) {}
+                    try { trafficClass = 0x10 } catch (_: Exception) {}
+                    connect(InetSocketAddress(targetIp, targetPort), 5000)
+                }
 
-                val dataOut = DataOutputStream(socket.getOutputStream())
-                val dataIn = DataInputStream(socket.getInputStream())
+                val dataOut = DataOutputStream(java.io.BufferedOutputStream(socket.getOutputStream(), 262144))
+                val dataIn = DataInputStream(java.io.BufferedInputStream(socket.getInputStream(), 262144))
 
                 // Send transfer request packet
                 dataOut.writeUTF("NOVASHARE_TRANSFER_REQUEST")
@@ -76,6 +81,8 @@ class P2PClient(
 
                 var overallSent = 0L
                 val startTime = System.currentTimeMillis()
+                var lastProgressTime = startTime
+                val buffer = ByteArray(262144) // 256 KB buffer
 
                 for (file in filesToSend) {
                     if (isCancelled) {
@@ -85,7 +92,7 @@ class P2PClient(
                         return@execute
                     }
 
-                    val inStream: InputStream? = if (file.uri != null) {
+                    val rawInStream: InputStream? = if (file.uri != null) {
                         try { context?.contentResolver?.openInputStream(file.uri) } catch (_: Exception) { null }
                     } else if (file.path.startsWith("content://")) {
                         try { context?.contentResolver?.openInputStream(android.net.Uri.parse(file.path)) } catch (_: Exception) { null }
@@ -94,8 +101,8 @@ class P2PClient(
                         if (srcFile.exists()) FileInputStream(srcFile) else null
                     }
 
-                    if (inStream != null) {
-                        val buffer = ByteArray(32768)
+                    if (rawInStream != null) {
+                        val inStream = java.io.BufferedInputStream(rawInStream, 262144)
                         var read: Int
 
                         while (inStream.read(buffer).also { read = it } != -1) {
@@ -104,15 +111,18 @@ class P2PClient(
                             overallSent += read
 
                             val now = System.currentTimeMillis()
-                            val elapsedSec = Math.max(1, (now - startTime) / 1000)
-                            val speed = overallSent / elapsedSec
-                            val remainingBytes = totalSize - overallSent
-                            val eta = if (speed > 0) remainingBytes / speed else 0
+                            if (now - lastProgressTime > 150) {
+                                val elapsedSec = Math.max(1, (now - startTime) / 1000)
+                                val speed = overallSent / elapsedSec
+                                val remainingBytes = totalSize - overallSent
+                                val eta = if (speed > 0) remainingBytes / speed else 0
 
-                            session.bytesTransferred = overallSent
-                            session.speedBytesPerSec = speed
-                            session.etaSeconds = eta
-                            onProgress(session)
+                                session.bytesTransferred = overallSent
+                                session.speedBytesPerSec = speed
+                                session.etaSeconds = eta
+                                onProgress(session)
+                                lastProgressTime = now
+                            }
                         }
                         inStream.close()
                     } else {

@@ -24,7 +24,8 @@ data class HotspotInfo(
     val ssid: String = "",
     val passphrase: String = "",
     val gatewayIp: String = "192.168.43.1",
-    val statusMessage: String = "Hotspot Idle"
+    val statusMessage: String = "Hotspot Idle",
+    val isFallbackAvailable: Boolean = false
 )
 
 class HotspotManager(private val context: Context) {
@@ -47,6 +48,34 @@ class HotspotManager(private val context: Context) {
     val isConnectingToHotspot: StateFlow<Boolean> = _isConnectingToHotspot.asStateFlow()
 
     /**
+     * Returns an intent to open the device's Tethering & Hotspot settings
+     */
+    fun getHotspotSettingsIntent(): android.content.Intent {
+        val tetherIntent = android.content.Intent("android.settings.TETHER_SETTINGS").apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        return if (tetherIntent.resolveActivity(context.packageManager) != null) {
+            tetherIntent
+        } else {
+            android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        }
+    }
+
+    /**
+     * Checks if standard Android Wi-Fi Hotspot / Tethering interface is currently active
+     */
+    fun isSystemTetheringActive(): Boolean {
+        return try {
+            val ip = NetworkUtils.getLocalIpAddress(context)
+            ip.startsWith("192.168.43.") || ip.startsWith("192.168.49.") || ip.startsWith("192.168.50.")
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
      * Receiver side: Starts an isolated, high-speed private Wi-Fi SoftAP on the device.
      */
     fun startLocalOnlyHotspot(
@@ -55,16 +84,26 @@ class HotspotManager(private val context: Context) {
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             val msg = "Local Hotspot requires Android 8.0+"
-            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg, isFallbackAvailable = true)
             onError(msg)
             return
         }
 
         if (wifiManager == null) {
             val msg = "Wi-Fi is not supported on this device"
-            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg, isFallbackAvailable = true)
             onError(msg)
             return
+        }
+
+        // On Android, Wi-Fi hardware MUST be enabled for LocalOnlyHotspot to start.
+        if (!wifiManager.isWifiEnabled) {
+            try {
+                @Suppress("DEPRECATION")
+                wifiManager.isWifiEnabled = true
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not automatically turn on Wi-Fi for hotspot: ${e.message}")
+            }
         }
 
         // Validate runtime permissions before calling system API
@@ -77,7 +116,7 @@ class HotspotManager(private val context: Context) {
             if (!nearbyGranted) {
                 val msg = "Nearby Devices permission is required to start Local Hotspot"
                 Log.w(TAG, msg)
-                _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+                _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg, isFallbackAvailable = true)
                 onError(msg)
                 return
             }
@@ -94,8 +133,24 @@ class HotspotManager(private val context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && !locationGranted) {
             val msg = "Location permission is required to start Local Hotspot"
             Log.w(TAG, msg)
-            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg, isFallbackAvailable = true)
             onError(msg)
+            return
+        }
+
+        // Check if system tethering hotspot is already running
+        if (isSystemTetheringActive()) {
+            val gatewayIp = NetworkUtils.getLocalIpAddress(context)
+            val info = HotspotInfo(
+                isActive = true,
+                ssid = "System_Hotspot",
+                passphrase = "",
+                gatewayIp = gatewayIp,
+                statusMessage = "System Hotspot Active ($gatewayIp)",
+                isFallbackAvailable = false
+            )
+            _hotspotInfo.value = info
+            onSuccess(info.ssid, info.passphrase, info.gatewayIp)
             return
         }
 
@@ -106,11 +161,12 @@ class HotspotManager(private val context: Context) {
         }
 
         try {
-            wifiManager?.startLocalOnlyHotspot(object : WifiManager.LocalOnlyHotspotCallback() {
+            wifiManager.startLocalOnlyHotspot(object : WifiManager.LocalOnlyHotspotCallback() {
                 override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation?) {
                     super.onStarted(reservation)
                     hotspotReservation = reservation
                     if (reservation == null) {
+                        _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = "Reservation was null", isFallbackAvailable = true)
                         onError("Reservation was null")
                         return
                     }
@@ -146,7 +202,8 @@ class HotspotManager(private val context: Context) {
                         ssid = ssid,
                         passphrase = password,
                         gatewayIp = gatewayIp,
-                        statusMessage = "Offline Private Hotspot Active"
+                        statusMessage = "Offline Private Hotspot Active",
+                        isFallbackAvailable = false
                     )
                     mainHandler.post { onSuccess(ssid, password, gatewayIp) }
                 }
@@ -163,24 +220,24 @@ class HotspotManager(private val context: Context) {
                     hotspotReservation = null
                     val reasonStr = when (reason) {
                         ERROR_NO_CHANNEL -> "No frequency channel available"
-                        ERROR_GENERIC -> "Generic hotspot failure"
-                        ERROR_INCOMPATIBLE_MODE -> "Incompatible Wi-Fi mode"
+                        ERROR_GENERIC -> "Generic hotspot failure (Try system hotspot settings)"
+                        ERROR_INCOMPATIBLE_MODE -> "Incompatible Wi-Fi mode (Try system hotspot settings)"
                         ERROR_TETHERING_DISALLOWED -> "Tethering disallowed by device policy"
-                        else -> "Failed with code $reason"
+                        else -> "Hotspot failed with code $reason"
                     }
-                    _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = reasonStr)
+                    _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = reasonStr, isFallbackAvailable = true)
                     mainHandler.post { onError(reasonStr) }
                 }
             }, mainHandler)
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException starting Local Hotspot - nearby devices/location permission missing", e)
-            val msg = "Permission denied: Nearby Devices / Location permission required"
-            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            val msg = "Permission denied: Nearby Devices / Location required"
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg, isFallbackAvailable = true)
             onError(msg)
         } catch (e: Exception) {
             Log.e(TAG, "Exception starting Local Hotspot", e)
             val msg = e.message ?: "Could not start hotspot"
-            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg, isFallbackAvailable = true)
             onError(msg)
         }
     }

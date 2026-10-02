@@ -61,8 +61,13 @@ class P2PServer(
 
     private fun handleIncomingConnection(socket: Socket) {
         try {
-            val dataInput = DataInputStream(socket.getInputStream())
-            val dataOutput = DataOutputStream(socket.getOutputStream())
+            socket.tcpNoDelay = true
+            try { socket.receiveBufferSize = 1048576 } catch (_: Exception) {}
+            try { socket.sendBufferSize = 1048576 } catch (_: Exception) {}
+            try { socket.trafficClass = 0x10 } catch (_: Exception) {}
+
+            val dataInput = DataInputStream(java.io.BufferedInputStream(socket.getInputStream(), 262144))
+            val dataOutput = DataOutputStream(java.io.BufferedOutputStream(socket.getOutputStream(), 262144))
 
             val header = dataInput.readUTF()
             Log.d("NovaP2PServer", "Received header: $header from ${socket.inetAddress}")
@@ -122,8 +127,8 @@ class P2PServer(
 
                 for (fileMeta in filesList) {
                     val destFile = File(outputDir, fileMeta.name)
-                    val fileOut = FileOutputStream(destFile)
-                    val buffer = ByteArray(32768)
+                    val fileOut = java.io.BufferedOutputStream(FileOutputStream(destFile), 262144)
+                    val buffer = ByteArray(262144)
                     var fileReceived = 0L
 
                     while (fileReceived < fileMeta.size) {

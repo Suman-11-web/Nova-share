@@ -44,8 +44,6 @@ fun SendScreen(
 ) {
     val context = LocalContext.current
 
-    val selectedCategory by viewModel.selectedCategory.collectAsState()
-    val availableFiles by viewModel.availableFiles.collectAsState()
     val selectedFiles by viewModel.selectedFiles.collectAsState()
     val discoveredDevices by viewModel.discoveredDevices.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
@@ -96,15 +94,6 @@ fun SendScreen(
     ) { permissions ->
         // Open Bluetooth/Wi-Fi dialog regardless to allow user to confirm adapter states
         showBluetoothWifiDialog = true
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadRealDeviceFiles(context)
-    }
-
-    val filteredFiles = remember(selectedCategory, availableFiles) {
-        if (selectedCategory == FileCategory.ALL) availableFiles
-        else availableFiles.filter { it.category == selectedCategory }
     }
 
     Scaffold(
@@ -164,60 +153,107 @@ fun SendScreen(
                 }
             }
 
-            // Category Filter Bar
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(vertical = 6.dp)
+            val pickedFiles by viewModel.pickedFiles.collectAsState()
+
+            // Header for Picked Files & Data
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                items(FileCategory.values()) { category ->
-                    val isSelected = category == selectedCategory
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.selectCategory(category, context) },
-                        label = { Text(text = category.displayName, fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = NovaPrimary,
-                            selectedLabelColor = NovaOnPrimary,
-                            containerColor = NovaDarkSurfaceVariant,
-                            labelColor = NovaTextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = NovaDarkOutline
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Picked Files & Data",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = NovaTextPrimary
                     )
+                    if (pickedFiles.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = NovaPrimary.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "${pickedFiles.size} (${NetworkUtils.formatFileSize(pickedFiles.sumOf { it.size })})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NovaPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (pickedFiles.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = {
+                                if (selectedFiles.size == pickedFiles.size) {
+                                    viewModel.deselectAllPickedFiles()
+                                } else {
+                                    viewModel.selectAllPickedFiles()
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                text = if (selectedFiles.size == pickedFiles.size) "Deselect All" else "Select All",
+                                fontSize = 11.sp,
+                                color = NovaPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        TextButton(
+                            onClick = { viewModel.clearAllPickedFiles() },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                text = "Clear",
+                                fontSize = 11.sp,
+                                color = NovaError,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
             }
 
-            // File Selection List / Empty state
-            if (filteredFiles.isEmpty()) {
+            // Picked Files List / Empty state
+            if (pickedFiles.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(NovaDarkSurface)
+                        .border(1.dp, NovaDarkOutline.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = Icons.Default.CloudUpload,
-                            contentDescription = "No files",
-                            tint = NovaTextMuted,
-                            modifier = Modifier.size(56.dp)
+                            contentDescription = "No picked files",
+                            tint = NovaPrimary.copy(alpha = 0.6f),
+                            modifier = Modifier.size(52.dp)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "No files loaded yet",
+                            text = "No Files Picked Yet",
                             color = NovaTextPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Text(
-                            text = "Tap 'Pick Files from Device' above to select real files from your storage",
+                            text = "Tap 'Pick Files from Device' above or tap 'Scan' to add files and data for transfer",
                             color = NovaTextSecondary,
                             fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(top = 4.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
@@ -228,7 +264,7 @@ fun SendScreen(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredFiles) { file ->
+                    items(pickedFiles) { file ->
                         val isSelected = selectedFiles.any { it.id == file.id }
                         Card(
                             modifier = Modifier
@@ -238,10 +274,11 @@ fun SendScreen(
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected) NovaPrimary.copy(alpha = 0.15f) else NovaDarkSurface
                             ),
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, NovaPrimary) else androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, NovaPrimary)
+                            else androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier.padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
@@ -253,19 +290,39 @@ fun SendScreen(
                                     )
                                 )
 
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                // File Icon
+                                val iconVector = when (file.category) {
+                                    FileCategory.IMAGES -> Icons.Default.Image
+                                    FileCategory.VIDEOS -> Icons.Default.VideoLibrary
+                                    FileCategory.AUDIO -> Icons.Default.MusicNote
+                                    FileCategory.DOCUMENTS -> Icons.Default.Description
+                                    FileCategory.APK -> Icons.Default.Android
+                                    else -> Icons.Default.InsertDriveFile
+                                }
+                                Icon(
+                                    imageVector = iconVector,
+                                    contentDescription = file.name,
+                                    tint = if (isSelected) NovaPrimary else NovaTextSecondary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(10.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = file.name,
                                         color = NovaTextPrimary,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = "${file.category.displayName} • ${NetworkUtils.formatFileSize(file.size)}",
                                         color = NovaTextSecondary,
-                                        fontSize = 12.sp
+                                        fontSize = 11.sp
                                     )
                                 }
 
@@ -273,7 +330,17 @@ fun SendScreen(
                                     Icon(
                                         imageVector = Icons.Default.Visibility,
                                         contentDescription = "Preview",
-                                        tint = NovaPrimary
+                                        tint = NovaPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = { viewModel.removePickedFile(file) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove",
+                                        tint = NovaTextMuted,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }

@@ -41,7 +41,7 @@ class P2PConnectivityManager(
         const val P2P_TCP_PORT = 8888
         const val P2P_UDP_DISCOVERY_PORT = 8889
         const val TAG = "NovaP2PManager"
-        const val BUFFER_SIZE = 65536 // 64 KB high-speed chunk
+        const val BUFFER_SIZE = 262144 // 256 KB ultra-fast streaming chunk
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -296,6 +296,7 @@ class P2PConnectivityManager(
             try {
                 tcpServerSocket = ServerSocket(P2P_TCP_PORT).apply {
                     reuseAddress = true
+                    try { receiveBufferSize = 1048576 } catch (_: Exception) {}
                 }
                 Log.d(TAG, "P2P TCP Server listening on port $P2P_TCP_PORT")
 
@@ -357,8 +358,11 @@ class P2PConnectivityManager(
     private fun handleIncomingP2PConnection(socket: Socket) {
         try {
             socket.tcpNoDelay = true
-            val dataIn = DataInputStream(BufferedInputStream(socket.getInputStream()))
-            val dataOut = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
+            try { socket.receiveBufferSize = 1048576 } catch (_: Exception) {}
+            try { socket.sendBufferSize = 1048576 } catch (_: Exception) {}
+            try { socket.trafficClass = 0x10 } catch (_: Exception) {}
+            val dataIn = DataInputStream(BufferedInputStream(socket.getInputStream(), BUFFER_SIZE))
+            val dataOut = DataOutputStream(BufferedOutputStream(socket.getOutputStream(), BUFFER_SIZE))
 
             val header = dataIn.readUTF()
             Log.d(TAG, "Incoming connection header: $header from ${socket.inetAddress}")
@@ -599,12 +603,15 @@ class P2PConnectivityManager(
             try {
                 clientSocket = Socket().apply {
                     tcpNoDelay = true
+                    try { sendBufferSize = 1048576 } catch (_: Exception) {}
+                    try { receiveBufferSize = 1048576 } catch (_: Exception) {}
+                    try { trafficClass = 0x10 } catch (_: Exception) {}
                     connect(InetSocketAddress(targetIp, targetPort), 6000)
                 }
                 activeClientSocket = clientSocket
 
-                val dataOut = DataOutputStream(BufferedOutputStream(clientSocket.getOutputStream()))
-                val dataIn = DataInputStream(BufferedInputStream(clientSocket.getInputStream()))
+                val dataOut = DataOutputStream(BufferedOutputStream(clientSocket.getOutputStream(), BUFFER_SIZE))
+                val dataIn = DataInputStream(BufferedInputStream(clientSocket.getInputStream(), BUFFER_SIZE))
 
                 val myDeviceName = NetworkUtils.getDeviceModelName()
                 val myIp = NetworkUtils.getLocalIpAddress(context)

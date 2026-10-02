@@ -17,12 +17,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+data class StoredFile(
+    val file: java.io.File,
+    val name: String,
+    val size: Long,
+    val lastModified: Long,
+    val category: FileCategory
+)
+
 class ReceiveViewModel(
     private val transferRepository: TransferRepository? = null
 ) : ViewModel() {
 
     private var p2pManager: P2PConnectivityManager? = null
     private var pendingDecisionCallback: ((Boolean) -> Unit)? = null
+
+    private val _storedFiles = MutableStateFlow<List<StoredFile>>(emptyList())
+    val storedFiles: StateFlow<List<StoredFile>> = _storedFiles.asStateFlow()
 
     private val _localIp = MutableStateFlow("127.0.0.1")
     val localIp: StateFlow<String> = _localIp.asStateFlow()
@@ -100,6 +111,7 @@ class ReceiveViewModel(
         val mgr = getOrCreateManager(context)
         mgr.radioStateManager.refreshStates()
         refreshQrString(context)
+        refreshStoredFiles(context)
 
         if (!_isListening.value) {
             startListening(context)
@@ -200,6 +212,7 @@ class ReceiveViewModel(
                 )
                 viewModelScope.launch {
                     transferRepository?.recordTransfer(entity)
+                    refreshStoredFiles(context)
                 }
             } else if (session.status == TransferStatus.DECLINED || session.status == TransferStatus.FAILED) {
                 TransferService.dismissTransferRequest(context)
@@ -210,6 +223,93 @@ class ReceiveViewModel(
         mgr.startReceiverEngine(onRadioActionNeeded = onRadioActionNeeded)
         _isListening.value = true
         refreshQrString(context)
+        refreshStoredFiles(context)
+    }
+
+    fun refreshStoredFiles(context: Context) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val saveDir = NovaShareStorage.getNovaShareDirectory(context)
+            val filesList: List<java.io.File> = saveDir.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") } ?: emptyList()
+            val list = filesList.sortedByDescending { it.lastModified() }.map { file ->
+                val ext = file.extension.lowercase()
+                val cat = when {
+                    ext in listOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "svg") -> FileCategory.IMAGES
+                    ext in listOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "flv") -> FileCategory.VIDEOS
+                    ext in listOf("mp3", "wav", "flac", "aac", "ogg", "m4a", "opus") -> FileCategory.AUDIO
+                    ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub") -> FileCategory.DOCUMENTS
+                    ext == "apk" -> FileCategory.APK
+                    else -> FileCategory.ALL
+                }
+                StoredFile(
+                    file = file,
+                    name = file.name,
+                    size = file.length(),
+                    lastModified = file.lastModified(),
+                    category = cat
+                )
+            }
+            _storedFiles.value = list
+        }
+    }
+
+    fun deleteStoredFile(context: Context, storedFile: StoredFile) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                if (storedFile.file.exists()) {
+                    storedFile.file.delete()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            refreshStoredFiles(context)
+        }
+    }
+
+    fun openStoredFile(context: Context, storedFile: StoredFile) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                storedFile.file
+            )
+            val mime = android.webkit.MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(storedFile.file.extension.lowercase()) ?: "*/*"
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Could not open file: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun shareStoredFile(context: Context, storedFile: StoredFile) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                storedFile.file
+            )
+            val mime = android.webkit.MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(storedFile.file.extension.lowercase()) ?: "*/*"
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(Intent.createChooser(intent, "Share ${storedFile.name}").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Could not share file: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun getHotspotSettingsIntent(context: Context): Intent {
+        return getOrCreateManager(context).hotspotManager.getHotspotSettingsIntent()
     }
 
     fun acceptTransfer() {
