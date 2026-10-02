@@ -44,8 +44,15 @@ fun ReceiveScreen(
     val isListening by viewModel.isListening.collectAsState()
     val incomingSession by viewModel.incomingSession.collectAsState()
     val pendingRequest by viewModel.pendingRequest.collectAsState()
+    val isWifiActive by viewModel.isWifiActive.collectAsState()
+    val isBluetoothActive by viewModel.isBluetoothActive.collectAsState()
+    val isHotspotMode by viewModel.isHotspotMode.collectAsState()
+    val hotspotInfo by viewModel.hotspotInfo.collectAsState()
+    val radioMessage by viewModel.radioMessage.collectAsState()
+    val qrDataString by viewModel.qrDataString.collectAsState()
 
-    val qrData = "NOVASHARE:IP=$localIp:PORT=8888:PIN=$pairingPin:DEVICE=${NetworkUtils.getDeviceModelName()}"
+    val qrData = if (qrDataString.isNotBlank()) qrDataString
+    else "NOVASHARE:IP=$localIp:PORT=8888:PIN=$pairingPin:DEVICE=${NetworkUtils.getDeviceModelName()}"
 
     Scaffold(
         topBar = {
@@ -92,15 +99,16 @@ fun ReceiveScreen(
                     ) {
                         // Wi-Fi Status
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isWifiOn = isWifiActive || wifiEnabled
                             Icon(
-                                imageVector = if (wifiEnabled) Icons.Default.Wifi else Icons.Default.WifiOff,
+                                imageVector = if (isWifiOn) Icons.Default.Wifi else Icons.Default.WifiOff,
                                 contentDescription = "Wi-Fi",
-                                tint = if (wifiEnabled) NovaPrimary else NovaError,
+                                tint = if (isWifiOn) NovaPrimary else NovaError,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (wifiEnabled) "Wi-Fi On" else "Wi-Fi Off",
+                                text = if (isWifiOn) "Wi-Fi On" else "Wi-Fi Off",
                                 color = NovaTextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -109,15 +117,16 @@ fun ReceiveScreen(
 
                         // Bluetooth Status
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isBtOn = isBluetoothActive || bluetoothEnabled
                             Icon(
-                                imageVector = if (bluetoothEnabled) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
+                                imageVector = if (isBtOn) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
                                 contentDescription = "Bluetooth",
-                                tint = if (bluetoothEnabled) NovaSecondary else NovaError,
+                                tint = if (isBtOn) NovaSecondary else NovaError,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (bluetoothEnabled) "Bluetooth On" else "Bluetooth Off",
+                                text = if (isBtOn) "Bluetooth On" else "Bluetooth Off",
                                 color = NovaTextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -125,15 +134,18 @@ fun ReceiveScreen(
                         }
                     }
 
-                    if (!wifiEnabled || !bluetoothEnabled) {
-                        TextButton(
+                    if (!(isWifiActive || wifiEnabled) || !(isBluetoothActive || bluetoothEnabled)) {
+                        Button(
                             onClick = {
-                                if (!wifiEnabled) NetworkUtils.openWifiSettings(context)
-                                else NetworkUtils.openBluetoothSettings(context)
+                                viewModel.explicitlyEnableRadios(context) { intent ->
+                                    try { context.startActivity(intent) } catch (_: Exception) {}
+                                }
                             },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary.copy(alpha = 0.2f)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text(text = "Turn On", color = NovaPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(text = "Turn On Radios", color = NovaPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
@@ -235,6 +247,57 @@ fun ReceiveScreen(
                     Switch(
                         checked = isListening,
                         onCheckedChange = { viewModel.toggleListening(context) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = NovaOnPrimary,
+                            checkedTrackColor = NovaPrimary,
+                            uncheckedThumbColor = NovaTextMuted,
+                            uncheckedTrackColor = NovaDarkSurfaceVariant
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Offline Private Hotspot Mode Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = if (isHotspotMode) NovaPrimary.copy(alpha = 0.12f) else NovaDarkSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isHotspotMode) NovaPrimary else NovaDarkOutline.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isHotspotMode) Icons.Default.WifiTethering else Icons.Default.WifiTetheringOff,
+                            contentDescription = "Hotspot Mode",
+                            tint = if (isHotspotMode) NovaPrimary else NovaTextMuted,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = if (isHotspotMode) "Offline Hotspot Active" else "Zero-Router Hotspot Mode",
+                                color = NovaTextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = if (isHotspotMode && hotspotInfo.ssid.isNotBlank()) "SSID: ${hotspotInfo.ssid} (QR Auto-Joins)"
+                                else "Transfer without existing Wi-Fi router",
+                                color = if (isHotspotMode) NovaPrimary else NovaTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = isHotspotMode,
+                        onCheckedChange = { viewModel.toggleHotspot(context) },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = NovaOnPrimary,
                             checkedTrackColor = NovaPrimary,

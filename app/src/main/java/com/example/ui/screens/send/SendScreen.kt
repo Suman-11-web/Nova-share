@@ -50,6 +50,9 @@ fun SendScreen(
     val discoveredDevices by viewModel.discoveredDevices.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
+    val isWifiActive by viewModel.isWifiActive.collectAsState()
+    val isBluetoothActive by viewModel.isBluetoothActive.collectAsState()
+    val radioMessage by viewModel.radioMessage.collectAsState()
 
     var previewFile by remember { mutableStateOf<SharedFile?>(null) }
     var showIpDialog by remember { mutableStateOf(false) }
@@ -362,6 +365,65 @@ fun SendScreen(
                         }
                     }
 
+                    // Hardware Radio Status Strip
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isWifiActive) Icons.Default.Wifi else Icons.Default.WifiOff,
+                                    contentDescription = "Wi-Fi",
+                                    tint = if (isWifiActive) NovaPrimary else NovaError,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isWifiActive) "Wi-Fi Ready" else "Wi-Fi Off",
+                                    color = if (isWifiActive) NovaTextSecondary else NovaError,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isBluetoothActive) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
+                                    contentDescription = "Bluetooth",
+                                    tint = if (isBluetoothActive) NovaSecondary else NovaError,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isBluetoothActive) "BT Ready" else "BT Off",
+                                    color = if (isBluetoothActive) NovaTextSecondary else NovaError,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        if (!isWifiActive || !isBluetoothActive) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.explicitlyEnableRadios(context) { intent ->
+                                        try { context.startActivity(intent) } catch (_: Exception) {}
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                            ) {
+                                Text("Enable Radios", color = NovaPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (discoveredDevices.isEmpty()) {
@@ -391,7 +453,7 @@ fun SendScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(16.dp))
-                                        .clickable { viewModel.initiateTransfer(device) }
+                                        .clickable { viewModel.initiateTransfer(context, device) }
                                         .padding(8.dp)
                                 ) {
                                     DeviceAvatar(deviceType = device.type, size = 52.dp)
@@ -426,7 +488,7 @@ fun SendScreen(
             text = {
                 Column {
                     Text(
-                        text = "NovaShare uses Bluetooth and local Wi-Fi to scan for nearby receiving phones. Please make sure both Bluetooth and Wi-Fi are turned ON.",
+                        text = "NovaShare uses Bluetooth and local Wi-Fi to scan for nearby receiving phones. The transfer engine will explicitly turn on required radios.",
                         color = NovaTextSecondary,
                         fontSize = 13.sp
                     )
@@ -436,11 +498,14 @@ fun SendScreen(
                 Button(
                     onClick = {
                         showBluetoothWifiDialog = false
+                        viewModel.explicitlyEnableRadios(context) { intent ->
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }
                         viewModel.searchNearbyDevices(context)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary)
                 ) {
-                    Text("Scan Active Network", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                    Text("Enable & Scan Network", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -457,7 +522,7 @@ fun SendScreen(
         CameraQrScannerDialog(
             onDismiss = { showCameraScanner = false },
             onQrScanned = { qrResult ->
-                viewModel.parseAndPairFromQr(qrResult)
+                viewModel.parseAndPairFromQr(context, qrResult)
                 showCameraScanner = false
             }
         )
@@ -499,7 +564,7 @@ fun SendScreen(
                 Button(
                     onClick = {
                         if (manualIpInput.isNotBlank()) {
-                            viewModel.addManualDevice(manualNameInput, manualIpInput)
+                            viewModel.addManualDevice(context, manualNameInput, manualIpInput)
                             showIpDialog = false
                             manualIpInput = ""
                             manualNameInput = ""

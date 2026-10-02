@@ -156,6 +156,22 @@ fun TransferProgressCard(
                             color = NovaPrimary,
                             fontSize = 11.sp
                         )
+                    } else if (session.status == TransferStatus.COMPLETED) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.VerifiedUser,
+                                contentDescription = "Verified Integrity",
+                                tint = NovaSuccess,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "End-to-End SHA-256 Verified • Zero-loss",
+                                color = NovaSuccess,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 

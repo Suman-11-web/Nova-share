@@ -260,7 +260,7 @@ fun CameraQrScannerDialog(
                             Button(
                                 onClick = {
                                     val localIp = NetworkUtils.getLocalIpAddress(context)
-                                    onQrScanned("NOVASHARE:IP=$localIp:PORT=8888:PIN=123456:DEVICE=Nearby Phone")
+                                    onQrScanned("NOVASHARE_P2P:v2;IP=$localIp;PORT=8888;NAME=Nearby Phone;TOKEN=mock_tok;PIN=123456")
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary.copy(alpha = 0.85f)),
                                 shape = RoundedCornerShape(16.dp)
