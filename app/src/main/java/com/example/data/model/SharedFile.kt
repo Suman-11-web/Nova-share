@@ -21,7 +21,7 @@ data class SharedFile(
     val uri: Uri? = null,
     val size: Long,
     val category: FileCategory,
-    val mimeType: String,
+    val mimeType: String = "*/*",
     val isDirectory: Boolean = false,
     val checksumSha256: String = "",
     val thumbnailUri: String? = null,

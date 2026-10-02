@@ -78,7 +78,7 @@ class P2PServer(
                     val size = dataInput.readLong()
                     val catName = dataInput.readUTF()
                     val cat = try { FileCategory.valueOf(catName) } catch (_: Exception) { FileCategory.ALL }
-                    filesList.add(SharedFile(id = "rx_$i", name = name, size = size, path = "", category = cat))
+                    filesList.add(SharedFile(id = "rx_$i", name = name, size = size, path = "", category = cat, mimeType = "*/*"))
                     totalSize += size
                 }
 

@@ -113,7 +113,7 @@ fun CameraQrScannerDialog(
                                             .addOnSuccessListener { barcodes ->
                                                 for (barcode in barcodes) {
                                                     val rawValue = barcode.rawValue
-                                                    if (!rawValue.isNull0rEmpty() && !isScanned) {
+                                                    if (rawValue != null && rawValue.isNotEmpty() && !isScanned) {
                                                         isScanned = true
                                                         Log.d("CameraQrScanner", "Scanned QR: $rawValue")
                                                         cameraProvider.unbindAll()
@@ -276,5 +276,3 @@ fun CameraQrScannerDialog(
         }
     }
 }
-
-private fun String?.isNull0rEmpty(): Boolean = this == null || this.isEmpty()
