@@ -53,6 +53,17 @@ fun SendScreen(
     val isWifiActive by viewModel.isWifiActive.collectAsState()
     val isBluetoothActive by viewModel.isBluetoothActive.collectAsState()
     val radioMessage by viewModel.radioMessage.collectAsState()
+    val userMessage by viewModel.userMessage.collectAsState()
+    val selectedDevice by viewModel.selectedDevice.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(userMessage) {
+        userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearUserMessage()
+        }
+    }
 
     var previewFile by remember { mutableStateOf<SharedFile?>(null) }
     var showIpDialog by remember { mutableStateOf(false) }
@@ -97,6 +108,7 @@ fun SendScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -449,12 +461,19 @@ fun SendScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             items(discoveredDevices) { device ->
+                                val isTarget = device.ipAddress == selectedDevice?.ipAddress
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(16.dp))
+                                        .background(if (isTarget) NovaPrimary.copy(alpha = 0.18f) else Color.Transparent)
+                                        .border(
+                                            width = if (isTarget) 2.dp else 1.dp,
+                                            color = if (isTarget) NovaPrimary else NovaDarkOutline.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
                                         .clickable { viewModel.initiateTransfer(context, device) }
-                                        .padding(8.dp)
+                                        .padding(10.dp)
                                 ) {
                                     DeviceAvatar(deviceType = device.type, size = 52.dp)
                                     Spacer(modifier = Modifier.height(6.dp))
@@ -462,14 +481,42 @@ fun SendScreen(
                                         text = device.name,
                                         color = NovaTextPrimary,
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = if (isTarget) FontWeight.Bold else FontWeight.Medium
                                     )
                                     Text(
                                         text = device.ipAddress,
-                                        color = NovaTextMuted,
+                                        color = if (isTarget) NovaPrimary else NovaTextMuted,
                                         fontSize = 10.sp
                                     )
                                 }
+                            }
+                        }
+
+                        selectedDevice?.let { target ->
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = { viewModel.initiateTransferToSelectedDevice(context) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Send,
+                                    contentDescription = "Send",
+                                    tint = NovaOnPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (selectedFiles.isNotEmpty()) {
+                                        "Send ${selectedFiles.size} File(s) to ${target.name}"
+                                    } else {
+                                        "Select Files Above to Send to ${target.name}"
+                                    },
+                                    color = NovaOnPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
                             }
                         }
                     }

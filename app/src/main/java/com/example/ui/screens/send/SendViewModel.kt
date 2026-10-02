@@ -12,6 +12,7 @@ import com.example.data.repository.TransferRepository
 import com.example.network.NetworkUtils
 import com.example.network.P2PConnectivityManager
 import com.example.network.RadioStateManager
+import com.example.network.TransferService
 import com.example.util.DeviceFileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,13 @@ class SendViewModel(
 
     private val _radioMessage = MutableStateFlow("Radios idle")
     val radioMessage: StateFlow<String> = _radioMessage.asStateFlow()
+
+    private val _userMessage = MutableStateFlow<String?>(null)
+    val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
+
+    fun clearUserMessage() {
+        _userMessage.value = null
+    }
 
     private fun getOrCreateManager(context: Context): P2PConnectivityManager {
         if (p2pManager == null) {
@@ -166,44 +174,71 @@ class SendViewModel(
         var pin = ""
 
         val raw = qrContent.trim()
-        if (raw.startsWith("NOVASHARE_P2P:") || raw.startsWith("NOVASHARE:")) {
-            val parts = raw.split(";", ":")
+        val p2pPart = if (raw.contains(";;")) raw.substringAfter(";;") else raw
+        if (p2pPart.startsWith("NOVASHARE_P2P:") || p2pPart.startsWith("NOVASHARE:")) {
+            val payload = if (p2pPart.startsWith("NOVASHARE_P2P:v2;")) p2pPart.removePrefix("NOVASHARE_P2P:v2;")
+            else if (p2pPart.startsWith("NOVASHARE_P2P:")) p2pPart.removePrefix("NOVASHARE_P2P:")
+            else p2pPart.removePrefix("NOVASHARE:")
+
+            val parts = payload.split(";")
             for (p in parts) {
-                if (p.startsWith("IP=")) ip = p.substringAfter("IP=")
-                if (p.startsWith("PORT=")) port = p.substringAfter("PORT=").toIntOrNull() ?: 8888
-                if (p.startsWith("NAME=") || p.startsWith("DEVICE=")) devName = p.substringAfter("=")
-                if (p.startsWith("TOKEN=")) token = p.substringAfter("TOKEN=")
-                if (p.startsWith("PIN=")) pin = p.substringAfter("PIN=")
+                val kv = p.split("=", limit = 2)
+                if (kv.size == 2) {
+                    when (kv[0].trim().uppercase()) {
+                        "IP" -> ip = kv[1].trim()
+                        "PORT" -> port = kv[1].trim().toIntOrNull() ?: 8888
+                        "NAME", "DEVICE" -> devName = kv[1].trim()
+                        "TOKEN" -> token = kv[1].trim()
+                        "PIN" -> pin = kv[1].trim()
+                    }
+                }
             }
-        } else if (raw.contains("http://")) {
-            ip = raw.substringAfter("http://").substringBefore(":").substringBefore("/")
-        } else if (raw.contains(":")) {
-            ip = raw.substringBefore(":")
-            port = raw.substringAfter(":").toIntOrNull() ?: 8888
+        } else if (p2pPart.startsWith("novashare://")) {
+            val uri = Uri.parse(p2pPart)
+            ip = uri.getQueryParameter("ip") ?: ""
+            port = uri.getQueryParameter("port")?.toIntOrNull() ?: 8888
+            devName = uri.getQueryParameter("name") ?: "Scanned Receiver"
+            token = uri.getQueryParameter("token") ?: ""
+            pin = uri.getQueryParameter("pin") ?: ""
+        } else if (p2pPart.contains("http://")) {
+            ip = p2pPart.substringAfter("http://").substringBefore(":").substringBefore("/")
+        } else if (p2pPart.contains(":")) {
+            ip = p2pPart.substringBefore(":")
+            port = p2pPart.substringAfter(":").toIntOrNull() ?: 8888
         } else {
-            ip = raw
+            ip = p2pPart.trim()
         }
 
         if (ip.isNotBlank()) {
             val newDevice = Device(
                 id = "qr_${System.currentTimeMillis()}",
-                name = "$devName ($ip)",
+                name = if (devName.isNotBlank() && devName != "Scanned Receiver") devName else "Receiver ($ip)",
                 ipAddress = ip,
                 port = port,
-                type = DeviceType.ANDROID
+                type = DeviceType.ANDROID,
+                qrToken = token,
+                pairingPin = pin
             )
             val current = _discoveredDevices.value.toMutableList()
             current.removeAll { it.ipAddress == newDevice.ipAddress }
             current.add(0, newDevice)
             _discoveredDevices.value = current
+            _selectedDevice.value = newDevice
 
             if (_selectedFiles.value.isNotEmpty()) {
                 mgr.parseAndConnectFromQr(qrContent, _selectedFiles.value) { session ->
                     _activeSession.value = session
                     if (session.status == TransferStatus.COMPLETED) {
+                        TransferService.showTransferCompleted(
+                            context = context,
+                            title = "Files Sent Successfully",
+                            message = "Sent ${_selectedFiles.value.size} file(s) to ${newDevice.name}"
+                        )
                         recordCompletedTransfers(newDevice.name, ip, _selectedFiles.value, session.speedBytesPerSec)
                     }
                 }
+            } else {
+                _userMessage.value = "Paired with ${newDevice.name}! Select files below, then tap Send to transfer."
             }
         }
     }
@@ -244,17 +279,39 @@ class SendViewModel(
         current.removeAll { it.ipAddress == newDevice.ipAddress }
         current.add(0, newDevice)
         _discoveredDevices.value = current
+        _selectedDevice.value = newDevice
+    }
+
+    private val _selectedDevice = MutableStateFlow<Device?>(null)
+    val selectedDevice: StateFlow<Device?> = _selectedDevice.asStateFlow()
+
+    fun selectTargetDevice(device: Device) {
+        _selectedDevice.value = device
     }
 
     fun initiateTransfer(context: Context, device: Device) {
+        _selectedDevice.value = device
+        if (_selectedFiles.value.isEmpty()) {
+            _userMessage.value = "Select files above first to send to ${device.name}"
+            return
+        }
         initiateTransferWithHandshake(
             context = context,
             targetIp = device.ipAddress,
             targetPort = device.port,
-            qrToken = "",
-            pin = "",
+            qrToken = device.qrToken,
+            pin = device.pairingPin,
             deviceName = device.name
         )
+    }
+
+    fun initiateTransferToSelectedDevice(context: Context) {
+        val device = _selectedDevice.value
+        if (device == null) {
+            _userMessage.value = "Please select or pair a receiver device first"
+            return
+        }
+        initiateTransfer(context, device)
     }
 
     private fun initiateTransferWithHandshake(
@@ -265,7 +322,10 @@ class SendViewModel(
         pin: String,
         deviceName: String
     ) {
-        if (_selectedFiles.value.isEmpty()) return
+        if (_selectedFiles.value.isEmpty()) {
+            _userMessage.value = "Select files above first"
+            return
+        }
         val mgr = getOrCreateManager(context)
         val files = _selectedFiles.value
 
@@ -282,6 +342,11 @@ class SendViewModel(
                 _activeSession.value = session
 
                 if (session.status == TransferStatus.COMPLETED) {
+                    TransferService.showTransferCompleted(
+                        context = context,
+                        title = "Files Sent Successfully",
+                        message = "Sent ${files.size} file(s) to $deviceName"
+                    )
                     recordCompletedTransfers(deviceName, targetIp, files, session.speedBytesPerSec)
                 }
             }

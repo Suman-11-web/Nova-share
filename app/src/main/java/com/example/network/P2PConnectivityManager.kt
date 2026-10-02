@@ -33,7 +33,7 @@ enum class P2PEngineMode {
 }
 
 class P2PConnectivityManager(
-    private val context: Context,
+    val context: Context,
     val radioStateManager: RadioStateManager = RadioStateManager(context),
     val hotspotManager: HotspotManager = HotspotManager(context)
 ) {
@@ -372,18 +372,12 @@ class P2PConnectivityManager(
                 val expectedToken = _currentQrToken.value
                 val expectedPin = _currentPin.value
 
-                val tokenConfirmed = (clientToken == expectedToken && expectedToken.isNotBlank()) ||
-                        (clientPin == expectedPin && expectedPin.isNotBlank())
+                // If QR token or PIN matches, the devices were directly paired via QR code
+                val tokenConfirmed = (clientToken.isNotBlank() && clientToken == expectedToken) ||
+                        (clientPin.isNotBlank() && clientPin == expectedPin)
 
-                if (!tokenConfirmed) {
-                    Log.w(TAG, "QR Handshake invalid: token=$clientToken, expected=$expectedToken")
-                    dataOut.writeUTF("HANDSHAKE_REJECTED")
-                    dataOut.flush()
-                    socket.close()
-                    return
-                }
-
-                Log.d(TAG, "Handshake CONFIRMED with $clientDeviceName ($clientIp)")
+                Log.d(TAG, "Handshake from $clientDeviceName ($clientIp), qrTokenMatched=$tokenConfirmed")
+                // Always confirm socket handshake so sender can transmit manifest for user review
                 dataOut.writeUTF("HANDSHAKE_CONFIRMED")
                 dataOut.flush()
 
@@ -433,20 +427,22 @@ class P2PConnectivityManager(
 
                 _activeSession.value = session
                 val decisionLatch = CountDownLatch(1)
-                var userAccepted = false
+                var userAccepted = tokenConfirmed // If explicitly paired via QR camera, auto-accept
 
                 val callback: (Boolean) -> Unit = { accepted ->
                     userAccepted = accepted
                     decisionLatch.countDown()
                 }
 
-                if (onTransferRequested != null) {
+                if (!tokenConfirmed && onTransferRequested != null) {
                     onTransferRequested?.invoke(session, callback)
+                    decisionLatch.await()
+                } else if (tokenConfirmed) {
+                    // Notify UI & notification of incoming approved transfer
+                    onTransferSessionUpdated?.invoke(session)
                 } else {
                     callback(true)
                 }
-
-                decisionLatch.await()
 
                 if (!userAccepted) {
                     dataOut.writeUTF("DECISION:DECLINED")

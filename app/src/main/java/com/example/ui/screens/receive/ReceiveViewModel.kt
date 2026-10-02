@@ -10,6 +10,7 @@ import com.example.data.repository.TransferRepository
 import com.example.network.NetworkUtils
 import com.example.network.P2PConnectivityManager
 import com.example.network.RadioStateManager
+import com.example.network.TransferService
 import com.example.util.NovaShareStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -152,12 +153,34 @@ class ReceiveViewModel(
             pendingDecisionCallback = decisionCallback
             _pendingRequest.value = session
             _incomingSession.value = session
+
+            // Show real heads-up system notification with Accept & Decline actions
+            TransferService.showTransferRequest(
+                context = context,
+                senderName = session.deviceName,
+                filesCount = session.files.size,
+                totalSizeFormatted = NetworkUtils.formatFileSize(session.totalBytes)
+            )
+        }
+
+        TransferService.onAcceptRequested = {
+            acceptTransfer()
+        }
+        TransferService.onDeclineRequested = {
+            declineTransfer()
         }
 
         mgr.onTransferSessionUpdated = { session ->
             _incomingSession.value = session
 
             if (session.status == TransferStatus.COMPLETED) {
+                TransferService.dismissTransferRequest(context)
+                TransferService.showTransferCompleted(
+                    context = context,
+                    title = "Files Received Successfully",
+                    message = "Received ${session.files.size} file(s) from ${session.deviceName}"
+                )
+
                 val fileName = session.files.firstOrNull()?.name ?: "Received_File"
                 val entity = TransferEntity(
                     id = session.id,
@@ -178,6 +201,8 @@ class ReceiveViewModel(
                 viewModelScope.launch {
                     transferRepository?.recordTransfer(entity)
                 }
+            } else if (session.status == TransferStatus.DECLINED || session.status == TransferStatus.FAILED) {
+                TransferService.dismissTransferRequest(context)
             }
         }
 
@@ -188,12 +213,18 @@ class ReceiveViewModel(
     }
 
     fun acceptTransfer() {
+        p2pManager?.let { mgr: P2PConnectivityManager ->
+            TransferService.dismissTransferRequest(mgr.context)
+        }
         pendingDecisionCallback?.invoke(true)
         pendingDecisionCallback = null
         _pendingRequest.value = null
     }
 
     fun declineTransfer() {
+        p2pManager?.let { mgr: P2PConnectivityManager ->
+            TransferService.dismissTransferRequest(mgr.context)
+        }
         pendingDecisionCallback?.invoke(false)
         pendingDecisionCallback = null
         _pendingRequest.value = null

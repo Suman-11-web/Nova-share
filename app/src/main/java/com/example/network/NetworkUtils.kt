@@ -80,19 +80,33 @@ object NetworkUtils {
                 )
             }
 
-            // Fallback to searching network interfaces
+            // Search network interfaces, prioritizing Wi-Fi, Hotspot, and P2P over cellular
             val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            var fallbackIp: String? = null
+
+            // First pass: wlan, ap, softap, p2p, rndis, eth
             for (intf in interfaces) {
+                val name = intf.name.lowercase()
+                val isPreferred = name.startsWith("wlan") || name.startsWith("ap") || 
+                        name.startsWith("softap") || name.startsWith("p2p") || 
+                        name.startsWith("rndis") || name.startsWith("eth")
+
                 val addrs = Collections.list(intf.inetAddresses)
                 for (addr in addrs) {
                     if (!addr.isLoopbackAddress && addr is Inet4Address) {
                         val host = addr.hostAddress
                         if (host != null && !host.startsWith("127.")) {
-                            return host
+                            if (isPreferred) {
+                                return host
+                            }
+                            if (fallbackIp == null && !name.startsWith("rmnet") && !name.startsWith("dummy")) {
+                                fallbackIp = host
+                            }
                         }
                     }
                 }
             }
+            if (fallbackIp != null) return fallbackIp
         } catch (e: Exception) {
             e.printStackTrace()
         }

@@ -14,6 +14,8 @@ data class Device(
     val isTrusted: Boolean = false,
     val isBlocked: Boolean = false,
     val isFavorite: Boolean = false,
+    val qrToken: String = "",
+    val pairingPin: String = "",
     val lastSeen: Long = System.currentTimeMillis()
 )
 

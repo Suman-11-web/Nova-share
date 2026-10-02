@@ -103,6 +103,47 @@ class RadioStateManager(private val appContext: Context) {
         }
     }
 
+    fun getBluetoothEnableIntent(): Intent {
+        val hasBtConnect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        return if (hasBtConnect) {
+            try {
+                Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } catch (_: Exception) {
+                Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+        } else {
+            Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+    }
+
+    fun getWifiEnableIntent(): Intent {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                Intent(Settings.Panel.ACTION_WIFI).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } catch (_: Exception) {
+                Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+        } else {
+            Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+    }
+
     /**
      * Explicitly enables required radios ONLY when the file transfer engine is initialized.
      * Manages hardware state responsibly.
@@ -120,41 +161,7 @@ class RadioStateManager(private val appContext: Context) {
         var intentNeeded: Intent? = null
         val messages = mutableListOf<String>()
 
-        // 1. Explicit Wi-Fi management
-        if (enableWifi && !wifiActivated) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                try {
-                    @Suppress("DEPRECATION")
-                    val success = wifiManager?.setWifiEnabled(true) ?: false
-                    if (success) {
-                        wifiActivated = true
-                        wifiEnabledByEngine = true
-                        messages.add("Wi-Fi enabled automatically by engine")
-                    }
-                } catch (e: Exception) {
-                    Log.w("RadioStateManager", "Could not enable Wi-Fi programmatically", e)
-                }
-            } else {
-                // Android 10+ requires system UI interaction for direct Wi-Fi enable
-                try {
-                    val panelIntent = Intent(Settings.Panel.ACTION_WIFI).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    intentNeeded = panelIntent
-                    messages.add("Wi-Fi toggle panel triggered")
-                } catch (_: Exception) {
-                    val fallbackIntent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    intentNeeded = fallbackIntent
-                    messages.add("Wi-Fi settings opened")
-                }
-            }
-        } else if (wifiActivated) {
-            messages.add("Wi-Fi radio already active")
-        }
-
-        // 2. Explicit Bluetooth management
+        // 1. Explicit Bluetooth management
         if (enableBluetooth && !btActivated) {
             bluetoothAdapter?.let { adapter ->
                 val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -169,7 +176,7 @@ class RadioStateManager(private val appContext: Context) {
                     ) == PackageManager.PERMISSION_GRANTED
                 }
 
-                if (hasPermission) {
+                if (hasPermission && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
                     try {
                         @Suppress("DEPRECATION")
                         val success = adapter.enable()
@@ -178,23 +185,45 @@ class RadioStateManager(private val appContext: Context) {
                             bluetoothEnabledByEngine = true
                             messages.add("Bluetooth radio enabled by engine")
                         } else {
-                            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            if (intentNeeded == null) intentNeeded = enableBtIntent
+                            intentNeeded = getBluetoothEnableIntent()
+                            messages.add("Bluetooth request dialog triggered")
                         }
                     } catch (e: Exception) {
                         Log.w("RadioStateManager", "Bluetooth programmatic enable failed", e)
+                        intentNeeded = getBluetoothEnableIntent()
                     }
                 } else {
-                    val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    if (intentNeeded == null) intentNeeded = enableBtIntent
+                    intentNeeded = getBluetoothEnableIntent()
+                    messages.add("Bluetooth settings/prompt triggered")
                 }
             }
         } else if (btActivated) {
             messages.add("Bluetooth radio active")
+        }
+
+        // 2. Explicit Wi-Fi management
+        if (enableWifi && !wifiActivated) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                try {
+                    @Suppress("DEPRECATION")
+                    val success = wifiManager?.setWifiEnabled(true) ?: false
+                    if (success) {
+                        wifiActivated = true
+                        wifiEnabledByEngine = true
+                        messages.add("Wi-Fi enabled automatically by engine")
+                    }
+                } catch (e: Exception) {
+                    Log.w("RadioStateManager", "Could not enable Wi-Fi programmatically", e)
+                }
+            } else {
+                // If Bluetooth didn't need user action, prompt for Wi-Fi
+                if (intentNeeded == null) {
+                    intentNeeded = getWifiEnableIntent()
+                }
+                messages.add("Wi-Fi toggle panel triggered")
+            }
+        } else if (wifiActivated) {
+            messages.add("Wi-Fi radio already active")
         }
 
         refreshStates()

@@ -45,7 +45,7 @@ fun MainAppNavigation(
     // ViewModels
     val sendViewModel = remember { SendViewModel(transferRepo, deviceRepo) }
     val receiveViewModel = remember { ReceiveViewModel(transferRepo) }
-    val webShareViewModel = remember { WebShareViewModel() }
+    val webShareViewModel = remember { WebShareViewModel(transferRepo) }
     val historyViewModel = remember { HistoryViewModel(transferRepo) }
     val settingsViewModel = remember { SettingsViewModel(settingsRepo, transferRepo, context) }
 
