@@ -135,21 +135,36 @@ fun SendScreen(
                     onClick = { filePickerLauncher.launch("*/*") },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Browse Files", tint = NovaOnPrimary)
+                    Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Browse Files", tint = NovaOnPrimary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Pick Files from Device", color = NovaOnPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(
+                        text = "Pick Files from Device",
+                        color = NovaOnPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
                 }
 
                 OutlinedButton(
                     onClick = { viewModel.loadRealDeviceFiles(context) },
                     shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Folder, contentDescription = "Scan Storage", tint = NovaSecondary)
+                    Icon(imageVector = Icons.Default.Folder, contentDescription = "Scan Storage", tint = NovaSecondary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "Scan", color = NovaTextPrimary, fontSize = 12.sp)
+                    Text(
+                        text = "Scan",
+                        color = NovaTextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
                 }
             }
 
@@ -163,12 +178,17 @@ fun SendScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Text(
                         text = "Picked Files & Data",
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = NovaTextPrimary
+                        color = NovaTextPrimary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     if (pickedFiles.isNotEmpty()) {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -181,7 +201,8 @@ fun SendScreen(
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = NovaPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                maxLines = 1
                             )
                         }
                     }
@@ -200,10 +221,11 @@ fun SendScreen(
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                         ) {
                             Text(
-                                text = if (selectedFiles.size == pickedFiles.size) "Deselect All" else "Select All",
+                                text = if (selectedFiles.size == pickedFiles.size) "Deselect" else "Select All",
                                 fontSize = 11.sp,
                                 color = NovaPrimary,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                         }
 
@@ -215,7 +237,8 @@ fun SendScreen(
                                 text = "Clear",
                                 fontSize = 11.sp,
                                 color = NovaError,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                         }
                     }
@@ -364,83 +387,110 @@ fun SendScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    // Title and selected status
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Nearby Receivers (${discoveredDevices.size})",
                                 color = NovaTextPrimary,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             if (selectedFiles.isNotEmpty()) {
                                 Text(
                                     text = "${selectedFiles.size} file(s) selected (${NetworkUtils.formatFileSize(selectedFiles.sumOf { it.size })})",
                                     color = NovaPrimary,
                                     fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                             }
                         }
+                    }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Scan QR Camera Button
-                            Button(
-                                onClick = {
-                                    val cameraPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
-                                    if (cameraPermission == PackageManager.PERMISSION_GRANTED) {
-                                        showCameraScanner = true
-                                    } else {
-                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                    }
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NovaSecondary)
-                            ) {
-                                Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR", tint = Color.Black, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = "Scan QR", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                            // Search Nearby Button (Triggers Bluetooth/Wi-Fi check & permissions)
-                            Button(
-                                onClick = {
-                                    val neededPermissions = mutableListOf(
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION
-                                    )
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        neededPermissions.add(Manifest.permission.BLUETOOTH_SCAN)
-                                        neededPermissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-                                        neededPermissions.add("android.permission.NEARBY_WIFI_DEVICES")
-                                    }
-
-                                    val ungranted = neededPermissions.filter {
-                                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                                    }
-
-                                    if (ungranted.isNotEmpty()) {
-                                        nearbyPermissionsLauncher.launch(ungranted.toTypedArray())
-                                    } else {
-                                        showBluetoothWifiDialog = true
-                                    }
-                                },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary)
-                            ) {
-                                if (isSearching) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = NovaOnPrimary, strokeWidth = 2.dp)
+                    // Buttons placed properly side-by-side with equal weight
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Scan QR Camera Button
+                        Button(
+                            onClick = {
+                                val cameraPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                                if (cameraPermission == PackageManager.PERMISSION_GRANTED) {
+                                    showCameraScanner = true
                                 } else {
-                                    Icon(imageVector = Icons.Default.Radar, contentDescription = "Search Nearby", tint = NovaOnPrimary, modifier = Modifier.size(16.dp))
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                                 }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = if (isSearching) "Scanning..." else "Search Nearby", fontSize = 11.sp, color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = NovaSecondary)
+                        ) {
+                            Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR", tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Scan QR",
+                                fontSize = 11.sp,
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+
+                        // Search Nearby Button
+                        Button(
+                            onClick = {
+                                val neededPermissions = mutableListOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    neededPermissions.add(Manifest.permission.BLUETOOTH_SCAN)
+                                    neededPermissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+                                    neededPermissions.add("android.permission.NEARBY_WIFI_DEVICES")
+                                }
+
+                                val ungranted = neededPermissions.filter {
+                                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                }
+
+                                if (ungranted.isNotEmpty()) {
+                                    nearbyPermissionsLauncher.launch(ungranted.toTypedArray())
+                                } else {
+                                    showBluetoothWifiDialog = true
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary)
+                        ) {
+                            if (isSearching) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = NovaOnPrimary, strokeWidth = 2.dp)
+                            } else {
+                                Icon(imageVector = Icons.Default.Radar, contentDescription = "Search Nearby", tint = NovaOnPrimary, modifier = Modifier.size(16.dp))
                             }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isSearching) "Scanning..." else "Search Nearby",
+                                fontSize = 11.sp,
+                                color = NovaOnPrimary,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
                     }
 
@@ -448,27 +498,29 @@ fun SendScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp),
+                            .padding(top = 10.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = if (isWifiActive) Icons.Default.Wifi else Icons.Default.WifiOff,
                                     contentDescription = "Wi-Fi",
                                     tint = if (isWifiActive) NovaPrimary else NovaError,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = if (isWifiActive) "Wi-Fi Ready" else "Wi-Fi Off",
                                     color = if (isWifiActive) NovaTextSecondary else NovaError,
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
                                 )
                             }
 
@@ -477,14 +529,15 @@ fun SendScreen(
                                     imageVector = if (isBluetoothActive) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
                                     contentDescription = "Bluetooth",
                                     tint = if (isBluetoothActive) NovaSecondary else NovaError,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = if (isBluetoothActive) "BT Ready" else "BT Off",
                                     color = if (isBluetoothActive) NovaTextSecondary else NovaError,
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -498,7 +551,7 @@ fun SendScreen(
                                 },
                                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                             ) {
-                                Text("Enable Radios", color = NovaPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Enable Radios", color = NovaPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
                         }
                     }
@@ -582,7 +635,9 @@ fun SendScreen(
                                     },
                                     color = NovaOnPrimary,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                             }
                         }

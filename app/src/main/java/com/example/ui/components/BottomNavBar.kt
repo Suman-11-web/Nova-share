@@ -51,11 +51,15 @@ fun BottomNavBar(
                 label = {
                     Text(
                         text = tab.title,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) NovaTextPrimary else NovaTextSecondary
+                        color = if (isSelected) NovaTextPrimary else NovaTextSecondary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        softWrap = false
                     )
                 },
+                alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
                     indicatorColor = NovaPrimary,
                     selectedIconColor = NovaOnPrimary,

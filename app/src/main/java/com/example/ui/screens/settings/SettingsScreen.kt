@@ -185,22 +185,25 @@ fun SettingsScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         StatBox(
                             title = "Total Sent",
                             value = NetworkUtils.formatFileSize(sentBytes),
-                            color = NovaPrimary
+                            color = NovaPrimary,
+                            modifier = Modifier.weight(1f)
                         )
                         StatBox(
                             title = "Total Received",
                             value = NetworkUtils.formatFileSize(receivedBytes),
-                            color = NovaSuccess
+                            color = NovaSuccess,
+                            modifier = Modifier.weight(1f)
                         )
                         StatBox(
                             title = "Completed",
                             value = "$completedCount files",
-                            color = NovaSecondary
+                            color = NovaSecondary,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -262,11 +265,12 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(
+                    androidx.compose.foundation.lazy.LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        AppThemeMode.entries.forEach { mode ->
+                        items(AppThemeMode.entries.size) { index ->
+                            val mode = AppThemeMode.entries[index]
                             val isSelected = mode == themeMode
                             FilterChip(
                                 selected = isSelected,
@@ -280,7 +284,8 @@ fun SettingsScreen(
                                             AppThemeMode.LIGHT -> "Light"
                                         },
                                         fontSize = 11.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1
                                     )
                                 },
                                 colors = FilterChipDefaults.filterChipColors(
@@ -385,26 +390,32 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Clickable Social & Profile Badges
-                    Row(
+                    // Clickable Social & Profile Badges (Horizontally scrollable for big text)
+                    androidx.compose.foundation.lazy.LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        DeveloperActionChip(
-                            label = "Portfolio",
-                            icon = Icons.Default.Language,
-                            onClick = { openExternalUrl(context, "https://sumanm.dev") }
-                        )
-                        DeveloperActionChip(
-                            label = "GitHub",
-                            icon = Icons.Default.Code,
-                            onClick = { openExternalUrl(context, "https://github.com/sumanm-dev") }
-                        )
-                        DeveloperActionChip(
-                            label = "Email",
-                            icon = Icons.Default.Email,
-                            onClick = { sendEmail(context, "sumanofficial.dev@gmail.com", "Nova Share Inquiry", "") }
-                        )
+                        item {
+                            DeveloperActionChip(
+                                label = "Portfolio",
+                                icon = Icons.Default.Language,
+                                onClick = { openExternalUrl(context, "https://sumanm.dev") }
+                            )
+                        }
+                        item {
+                            DeveloperActionChip(
+                                label = "GitHub",
+                                icon = Icons.Default.Code,
+                                onClick = { openExternalUrl(context, "https://github.com/sumanm-dev") }
+                            )
+                        }
+                        item {
+                            DeveloperActionChip(
+                                label = "Email",
+                                icon = Icons.Default.Email,
+                                onClick = { sendEmail(context, "sumanofficial.dev@gmail.com", "Nova Share Inquiry", "") }
+                            )
+                        }
                     }
                 }
             }
@@ -743,7 +754,13 @@ private fun DeveloperActionChip(
         ) {
             Icon(imageVector = icon, contentDescription = label, tint = NovaPrimary, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text(text = label, color = NovaTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = label,
+                color = NovaTextPrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
     }
 }
@@ -777,10 +794,23 @@ private fun AboutActionRow(
 }
 
 @Composable
-private fun StatBox(title: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-        Text(text = title, color = NovaTextMuted, fontSize = 11.sp)
+private fun StatBox(title: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+        Text(
+            text = value,
+            color = color,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 15.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            text = title,
+            color = NovaTextMuted,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }
 

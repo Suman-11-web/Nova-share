@@ -143,18 +143,22 @@ fun TransferProgressCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "${(progress * 100).toInt()}% (${NetworkUtils.formatFileSize(session.bytesTransferred)} / ${NetworkUtils.formatFileSize(session.totalBytes)})",
                         color = NovaTextPrimary,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     if (session.status == TransferStatus.TRANSFERRING) {
                         Text(
                             text = "Speed: ${NetworkUtils.formatSpeed(session.speedBytesPerSec)} • ETA: ${NetworkUtils.formatDuration(session.etaSeconds)}",
                             color = NovaPrimary,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     } else if (session.status == TransferStatus.COMPLETED) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -169,11 +173,15 @@ fun TransferProgressCard(
                                 text = "End-to-End SHA-256 Verified • Zero-loss",
                                 color = NovaSuccess,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Row {
                     if (session.status == TransferStatus.TRANSFERRING || session.status == TransferStatus.PAUSED) {

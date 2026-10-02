@@ -106,7 +106,9 @@ fun WebShareScreen(
                         Text(
                             text = if (isServerRunning) "Stop Web Server" else "Start Web Portal Server",
                             fontWeight = FontWeight.Bold,
-                            color = if (isServerRunning) Color.White else NovaOnPrimary
+                            color = if (isServerRunning) Color.White else NovaOnPrimary,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -130,7 +132,9 @@ fun WebShareScreen(
                             text = "Scan or Open Address in Browser",
                             color = NovaTextPrimary,
                             fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -146,7 +150,9 @@ fun WebShareScreen(
                                 text = webUrl,
                                 color = NovaPrimary,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                         }
@@ -194,12 +200,28 @@ fun WebShareScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Published to Web (${webSharedFiles.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    text = {
+                        Text(
+                            text = "Published (${webSharedFiles.size})",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Received from PC (${webUploadedFiles.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    text = {
+                        Text(
+                            text = "Received (${webUploadedFiles.size})",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
                 )
             }
 
@@ -213,21 +235,26 @@ fun WebShareScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Files for Connected PC to Download",
+                        text = "Files for PC to Download",
                         color = NovaTextPrimary,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
                         onClick = { pickerLauncher.launch("*/*") },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(imageVector = Icons.Default.Add, contentDescription = "Add Files", tint = NovaOnPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Add Files", fontSize = 11.sp, color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                        Text(text = "Add Files", fontSize = 11.sp, color = NovaOnPrimary, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
 

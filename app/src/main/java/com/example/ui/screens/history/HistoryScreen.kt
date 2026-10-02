@@ -122,7 +122,10 @@ fun HistoryScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
                                         Icon(
                                             imageVector = directionIcon,
                                             contentDescription = log.direction,
@@ -134,9 +137,12 @@ fun HistoryScreen(
                                             text = log.fileName,
                                             color = NovaTextPrimary,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                         )
                                     }
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     IconButton(
                                         onClick = { viewModel.deleteItem(log.id) },
                                         modifier = Modifier.size(28.dp)
@@ -149,17 +155,23 @@ fun HistoryScreen(
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = "${if (isSend) "To" else "From"} ${log.deviceName} • ${NetworkUtils.formatFileSize(log.fileSize)}",
                                         color = NovaTextSecondary,
-                                        fontSize = 12.sp
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = dateFormatter.format(Date(log.timestamp)),
                                         color = NovaTextMuted,
-                                        fontSize = 11.sp
+                                        fontSize = 10.sp,
+                                        maxLines = 1
                                     )
                                 }
 

@@ -123,64 +123,76 @@ fun ReceiveScreen(
                 colors = CardDefaults.cardColors(containerColor = NovaDarkSurface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, NovaDarkOutline.copy(alpha = 0.3f))
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Wi-Fi Status
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isWifiOn = isWifiActive || wifiEnabled
-                            Icon(
-                                imageVector = if (isWifiOn) Icons.Default.Wifi else Icons.Default.WifiOff,
-                                contentDescription = "Wi-Fi",
-                                tint = if (isWifiOn) NovaPrimary else NovaError,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isWifiOn) "Wi-Fi On" else "Wi-Fi Off",
-                                color = NovaTextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Bluetooth Status
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isBtOn = isBluetoothActive || bluetoothEnabled
-                            Icon(
-                                imageVector = if (isBtOn) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
-                                contentDescription = "Bluetooth",
-                                tint = if (isBtOn) NovaSecondary else NovaError,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isBtOn) "Bluetooth On" else "Bluetooth Off",
-                                color = NovaTextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    if (!(isWifiActive || wifiEnabled) || !(isBluetoothActive || bluetoothEnabled)) {
-                        Button(
-                            onClick = {
-                                viewModel.explicitlyEnableRadios(context) { intent ->
-                                    try { context.startActivity(intent) } catch (_: Exception) {}
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary.copy(alpha = 0.2f)),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(12.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
-                            Text(text = "Turn On Radios", color = NovaPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            // Wi-Fi Status
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val isWifiOn = isWifiActive || wifiEnabled
+                                Icon(
+                                    imageVector = if (isWifiOn) Icons.Default.Wifi else Icons.Default.WifiOff,
+                                    contentDescription = "Wi-Fi",
+                                    tint = if (isWifiOn) NovaPrimary else NovaError,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isWifiOn) "Wi-Fi On" else "Wi-Fi Off",
+                                    color = NovaTextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+
+                            // Bluetooth Status
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val isBtOn = isBluetoothActive || bluetoothEnabled
+                                Icon(
+                                    imageVector = if (isBtOn) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
+                                    contentDescription = "Bluetooth",
+                                    tint = if (isBtOn) NovaSecondary else NovaError,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isBtOn) "BT On" else "BT Off",
+                                    color = NovaTextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        if (!(isWifiActive || wifiEnabled) || !(isBluetoothActive || bluetoothEnabled)) {
+                            Button(
+                                onClick = {
+                                    viewModel.explicitlyEnableRadios(context) { intent ->
+                                        try { context.startActivity(intent) } catch (_: Exception) {}
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary.copy(alpha = 0.2f)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "Turn On Radios",
+                                    color = NovaPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
@@ -256,7 +268,10 @@ fun ReceiveScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Icon(
                             imageVector = if (isListening) Icons.Default.WifiTethering else Icons.Default.PortableWifiOff,
                             contentDescription = "Radar Status",
@@ -264,20 +279,26 @@ fun ReceiveScreen(
                             modifier = Modifier.size(28.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (isListening) "Receiver Active & Listening" else "Receiver Idle",
                                 color = NovaTextPrimary,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Text(
                                 text = if (isListening) "Ready for incoming transfers" else "Tap to start receiver engine",
                                 color = NovaTextSecondary,
-                                fontSize = 11.sp
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Switch(
                         checked = isListening,
@@ -318,22 +339,28 @@ fun ReceiveScreen(
                                 modifier = Modifier.size(28.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = if (isHotspotMode) "Offline Hotspot Active" else "Zero-Router Hotspot Mode",
                                     color = NovaTextPrimary,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = if (isHotspotMode && hotspotInfo.ssid.isNotBlank()) "SSID: ${hotspotInfo.ssid} (QR Auto-Joins)"
                                     else if (hotspotInfo.statusMessage.isNotBlank() && hotspotInfo.statusMessage != "Hotspot Idle") hotspotInfo.statusMessage
                                     else "Transfer without existing Wi-Fi router",
                                     color = if (isHotspotMode) NovaPrimary else NovaTextSecondary,
-                                    fontSize = 11.sp
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Switch(
                             checked = isHotspotMode,
@@ -387,7 +414,14 @@ fun ReceiveScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings", tint = NovaPrimary, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "Hotspot / Tethering Settings", color = NovaPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "Hotspot / Tethering Settings",
+                                color = NovaPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
@@ -408,12 +442,17 @@ fun ReceiveScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Text(
                         text = "Received Files & Stored Data",
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = NovaTextPrimary
+                        color = NovaTextPrimary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
@@ -425,7 +464,8 @@ fun ReceiveScreen(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = NovaSecondary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            maxLines = 1
                         )
                     }
                 }
@@ -435,29 +475,36 @@ fun ReceiveScreen(
                 }
             }
 
-            // Category Filter for Received Stored Files
+            // Category Filter for Received Stored Files (Horizontally Scrollable)
             if (storedFiles.isNotEmpty()) {
-                Row(
+                val filterCategories: List<Pair<FileCategory?, String>> = listOf(
+                    null to "All (${storedFiles.size})",
+                    FileCategory.IMAGES to "Images (${storedFiles.count { it.category == FileCategory.IMAGES }})",
+                    FileCategory.VIDEOS to "Videos (${storedFiles.count { it.category == FileCategory.VIDEOS }})",
+                    FileCategory.DOCUMENTS to "Docs (${storedFiles.count { it.category == FileCategory.DOCUMENTS }})"
+                )
+
+                androidx.compose.foundation.lazy.LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val filterCategories: List<Pair<FileCategory?, String>> = listOf(
-                        null to "All (${storedFiles.size})",
-                        FileCategory.IMAGES to "Images (${storedFiles.count { it.category == FileCategory.IMAGES }})",
-                        FileCategory.VIDEOS to "Videos (${storedFiles.count { it.category == FileCategory.VIDEOS }})",
-                        FileCategory.DOCUMENTS to "Docs (${storedFiles.count { it.category == FileCategory.DOCUMENTS }})"
-                    )
-
-                    filterCategories.forEach { pair ->
+                    items(filterCategories.size) { index ->
+                        val pair = filterCategories[index]
                         val cat = pair.first
                         val label = pair.second
                         val isSelected = selectedStoredCategory == cat
                         FilterChip(
                             selected = isSelected,
                             onClick = { selectedStoredCategory = if (isSelected) null else cat },
-                            label = { Text(text = label, fontSize = 11.sp) },
+                            label = {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = NovaSecondary,
                                 selectedLabelColor = Color.Black,
@@ -726,7 +773,13 @@ fun ReceiveScreen(
                 ) {
                     Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Accept", tint = NovaOnPrimary)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Accept & Download", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Accept",
+                        color = NovaOnPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
                 }
             },
             dismissButton = {
@@ -738,7 +791,13 @@ fun ReceiveScreen(
                 ) {
                     Icon(imageVector = Icons.Default.Cancel, contentDescription = "Decline", tint = NovaError)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Decline", color = NovaError, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Decline",
+                        color = NovaError,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
                 }
             },
             containerColor = NovaDarkSurface,
