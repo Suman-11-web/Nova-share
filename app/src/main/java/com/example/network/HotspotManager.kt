@@ -1,6 +1,8 @@
 package com.example.network
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -12,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +55,45 @@ class HotspotManager(private val context: Context) {
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             val msg = "Local Hotspot requires Android 8.0+"
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            onError(msg)
+            return
+        }
+
+        if (wifiManager == null) {
+            val msg = "Wi-Fi is not supported on this device"
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            onError(msg)
+            return
+        }
+
+        // Validate runtime permissions before calling system API
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val nearbyGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!nearbyGranted) {
+                val msg = "Nearby Devices permission is required to start Local Hotspot"
+                Log.w(TAG, msg)
+                _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+                onError(msg)
+                return
+            }
+        }
+
+        val locationGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && !locationGranted) {
+            val msg = "Location permission is required to start Local Hotspot"
+            Log.w(TAG, msg)
             _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
             onError(msg)
             return
@@ -130,6 +172,11 @@ class HotspotManager(private val context: Context) {
                     mainHandler.post { onError(reasonStr) }
                 }
             }, mainHandler)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException starting Local Hotspot - nearby devices/location permission missing", e)
+            val msg = "Permission denied: Nearby Devices / Location permission required"
+            _hotspotInfo.value = HotspotInfo(isActive = false, statusMessage = msg)
+            onError(msg)
         } catch (e: Exception) {
             Log.e(TAG, "Exception starting Local Hotspot", e)
             val msg = e.message ?: "Could not start hotspot"

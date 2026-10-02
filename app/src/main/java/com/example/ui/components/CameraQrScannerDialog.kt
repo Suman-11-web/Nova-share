@@ -54,6 +54,22 @@ fun CameraQrScannerDialog(
     var showManualInput by remember { mutableStateOf(false) }
     var isScanned by remember { mutableStateOf(false) }
 
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val barcodeScanner = remember { BarcodeScanning.getClient() }
+    var activeCameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                activeCameraProvider?.unbindAll()
+                barcodeScanner.close()
+                analysisExecutor.shutdown()
+            } catch (e: Exception) {
+                Log.e("CameraQrScanner", "Cleanup error", e)
+            }
+        }
+    }
+
     // Laser scan animation
     val infiniteTransition = rememberInfiniteTransition(label = "Laser")
     val laserY by infiniteTransition.animateFloat(
@@ -84,15 +100,15 @@ fun CameraQrScannerDialog(
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
                             scaleType = PreviewView.ScaleType.FILL_CENTER
+                            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         }
 
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                        val analysisExecutor = Executors.newSingleThreadExecutor()
-                        val barcodeScanner = BarcodeScanning.getClient()
 
                         cameraProviderFuture.addListener({
                             try {
                                 val cameraProvider = cameraProviderFuture.get()
+                                activeCameraProvider = cameraProvider
                                 val preview = Preview.Builder().build().also {
                                     it.setSurfaceProvider(previewView.surfaceProvider)
                                 }

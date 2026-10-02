@@ -1,5 +1,10 @@
 package com.example.ui.screens.receive
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -18,10 +23,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.network.NetworkUtils
 import com.example.ui.components.QRCodeCanvas
 import com.example.ui.components.TransferProgressCard
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +36,27 @@ fun ReceiveScreen(
     viewModel: ReceiveViewModel
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val hotspotPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val nearbyOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions[Manifest.permission.NEARBY_WIFI_DEVICES] == true
+        } else true
+
+        val locationOk = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        if (nearbyOk && (locationOk || Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)) {
+            viewModel.toggleHotspot(context)
+        } else {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Nearby Devices permission is required for Offline Hotspot mode")
+            }
+        }
+    }
 
     var wifiEnabled by remember { mutableStateOf(NetworkUtils.isWifiEnabled(context)) }
     var bluetoothEnabled by remember { mutableStateOf(NetworkUtils.isBluetoothEnabled()) }
@@ -55,6 +83,7 @@ fun ReceiveScreen(
     else "NOVASHARE:IP=$localIp:PORT=8888:PIN=$pairingPin:DEVICE=${NetworkUtils.getDeviceModelName()}"
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(text = "Receive Files", fontWeight = FontWeight.ExtraBold, color = NovaTextPrimary) },
@@ -297,7 +326,30 @@ fun ReceiveScreen(
 
                     Switch(
                         checked = isHotspotMode,
-                        onCheckedChange = { viewModel.toggleHotspot(context) },
+                        onCheckedChange = { willEnable ->
+                            if (willEnable) {
+                                val neededPermissions = mutableListOf<String>()
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+                                        neededPermissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                                    }
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                        neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                                    neededPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                                }
+
+                                if (neededPermissions.isNotEmpty()) {
+                                    hotspotPermissionsLauncher.launch(neededPermissions.toTypedArray())
+                                } else {
+                                    viewModel.toggleHotspot(context)
+                                }
+                            } else {
+                                viewModel.toggleHotspot(context)
+                            }
+                        },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = NovaOnPrimary,
                             checkedTrackColor = NovaPrimary,
