@@ -727,18 +727,7 @@ class P2PConnectivityManager(
 
                         Log.d(TAG, "File ${file.name} sent. Checksum tx: $calculatedSha256, rx: $receiverSha256")
                     } else {
-                        // Fallback byte generation if stream unavailable
-                        var sent = 0L
-                        while (sent < file.size && isRunning.get()) {
-                            val chunk = Math.min(buffer.size.toLong(), file.size - sent).toInt()
-                            dataOut.write(buffer, 0, chunk)
-                            sent += chunk
-                            overallSent += chunk
-                        }
-                        dataOut.flush()
-                        dataIn.readUTF()
-                        dataOut.writeUTF("mock_hash")
-                        dataOut.flush()
+                        throw java.io.IOException("Cannot read stream for file ${file.name}: file is not accessible or deleted")
                     }
                 }
 
@@ -795,18 +784,33 @@ class P2PConnectivityManager(
 
         val p2pPart = if (raw.contains(";;")) raw.substringAfter(";;") else raw
         if (p2pPart.startsWith("NOVASHARE_P2P:") || p2pPart.startsWith("NOVASHARE:")) {
-            val parts = p2pPart.split(";", ":")
+            val payload = if (p2pPart.startsWith("NOVASHARE_P2P:v2;")) p2pPart.removePrefix("NOVASHARE_P2P:v2;")
+            else if (p2pPart.startsWith("NOVASHARE_P2P:")) p2pPart.removePrefix("NOVASHARE_P2P:")
+            else p2pPart.removePrefix("NOVASHARE:")
+
+            val parts = payload.split(";")
             for (p in parts) {
-                if (p.startsWith("IP=")) ip = p.substringAfter("IP=")
-                if (p.startsWith("PORT=")) port = p.substringAfter("PORT=").toIntOrNull() ?: P2P_TCP_PORT
-                if (p.startsWith("TOKEN=")) token = p.substringAfter("TOKEN=")
-                if (p.startsWith("PIN=")) pin = p.substringAfter("PIN=")
+                val kv = p.split("=", limit = 2)
+                if (kv.size == 2) {
+                    when (kv[0].trim().uppercase()) {
+                        "IP" -> ip = kv[1].trim()
+                        "PORT" -> port = kv[1].trim().toIntOrNull() ?: P2P_TCP_PORT
+                        "TOKEN" -> token = kv[1].trim()
+                        "PIN" -> pin = kv[1].trim()
+                    }
+                }
             }
+        } else if (p2pPart.startsWith("novashare://")) {
+            val uri = android.net.Uri.parse(p2pPart)
+            ip = uri.getQueryParameter("ip") ?: ""
+            port = uri.getQueryParameter("port")?.toIntOrNull() ?: P2P_TCP_PORT
+            token = uri.getQueryParameter("token") ?: ""
+            pin = uri.getQueryParameter("pin") ?: ""
         } else if (p2pPart.contains(":")) {
             ip = p2pPart.substringBefore(":")
             port = p2pPart.substringAfter(":").toIntOrNull() ?: P2P_TCP_PORT
         } else {
-            ip = p2pPart
+            ip = p2pPart.trim()
         }
 
         if (wifiSsid.isNotBlank()) {

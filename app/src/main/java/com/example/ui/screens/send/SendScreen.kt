@@ -111,16 +111,16 @@ fun SendScreen(
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh Storage", tint = NovaPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NovaDarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = NovaDarkBackground
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
         ) {
             // Action Bar: Pick Files from Device Storage
             Row(

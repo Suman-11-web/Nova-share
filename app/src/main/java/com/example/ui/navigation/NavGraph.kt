@@ -5,12 +5,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.example.data.local.AppDatabase
 import com.example.data.repository.DeviceRepository
 import com.example.data.repository.SettingsRepository
@@ -30,21 +32,22 @@ import com.example.ui.screens.webshare.WebShareScreen
 import com.example.ui.screens.webshare.WebShareViewModel
 
 @Composable
-fun MainAppNavigation() {
+fun MainAppNavigation(
+    settingsRepo: SettingsRepository = SettingsRepository(LocalContext.current)
+) {
     val context = LocalContext.current
 
     // Initialize Database & Repositories
     val database = remember { AppDatabase.getDatabase(context) }
     val transferRepo = remember { TransferRepository(database.transferDao()) }
     val deviceRepo = remember { DeviceRepository(database.deviceDao()) }
-    val settingsRepo = remember { SettingsRepository(context) }
 
     // ViewModels
     val sendViewModel = remember { SendViewModel(transferRepo, deviceRepo) }
     val receiveViewModel = remember { ReceiveViewModel(transferRepo) }
     val webShareViewModel = remember { WebShareViewModel() }
     val historyViewModel = remember { HistoryViewModel(transferRepo) }
-    val settingsViewModel = remember { SettingsViewModel(settingsRepo) }
+    val settingsViewModel = remember { SettingsViewModel(settingsRepo, transferRepo, context) }
 
     var showSplash by remember { mutableStateOf(true) }
     var currentTab by remember { mutableStateOf(NavTab.SEND) }
@@ -53,6 +56,7 @@ fun MainAppNavigation() {
         AnimatedEntrySplashScreen(onSplashFinished = { showSplash = false })
     } else {
         Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 BottomNavBar(
                     currentTab = currentTab,
@@ -63,7 +67,7 @@ fun MainAppNavigation() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(bottom = paddingValues.calculateBottomPadding())
             ) {
                 AnimatedContent(
                     targetState = currentTab,

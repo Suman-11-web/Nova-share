@@ -1,12 +1,12 @@
 package com.example.ui.components
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.util.Log
 import android.view.ViewGroup
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -33,8 +33,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import com.example.network.NetworkUtils
 import com.example.ui.theme.*
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -53,14 +53,22 @@ fun CameraQrScannerDialog(
     var manualIpText by remember { mutableStateOf("") }
     var showManualInput by remember { mutableStateOf(false) }
     var isScanned by remember { mutableStateOf(false) }
+    var cameraErrorMessage by remember { mutableStateOf<String?>(null) }
+    var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-    val barcodeScanner = remember { BarcodeScanning.getClient() }
+    val barcodeScanner = remember {
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        BarcodeScanning.getClient(options)
+    }
     var activeCameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
             try {
+                cameraControl?.enableTorch(false)
                 activeCameraProvider?.unbindAll()
                 barcodeScanner.close()
                 analysisExecutor.shutdown()
@@ -74,9 +82,9 @@ fun CameraQrScannerDialog(
     val infiniteTransition = rememberInfiniteTransition(label = "Laser")
     val laserY by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 200f,
+        targetValue = 220f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
+            animation = tween(1600, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "LaserY"
@@ -129,9 +137,9 @@ fun CameraQrScannerDialog(
                                             .addOnSuccessListener { barcodes ->
                                                 for (barcode in barcodes) {
                                                     val rawValue = barcode.rawValue
-                                                    if (rawValue != null && rawValue.isNotEmpty() && !isScanned) {
+                                                    if (!rawValue.isNullOrBlank() && !isScanned) {
                                                         isScanned = true
-                                                        Log.d("CameraQrScanner", "Scanned QR: $rawValue")
+                                                        Log.d("CameraQrScanner", "Scanned real QR: $rawValue")
                                                         cameraProvider.unbindAll()
                                                         onQrScanned(rawValue)
                                                         break
@@ -148,14 +156,16 @@ fun CameraQrScannerDialog(
 
                                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                                 cameraProvider.unbindAll()
-                                cameraProvider.bindToLifecycle(
+                                val camera: Camera = cameraProvider.bindToLifecycle(
                                     lifecycleOwner,
                                     cameraSelector,
                                     preview,
                                     imageAnalysis
                                 )
+                                cameraControl = camera.cameraControl
                             } catch (e: Exception) {
-                                Log.e("CameraQrScanner", "Camera binding failed", e)
+                                Log.e("CameraQrScanner", "Camera initialization failed", e)
+                                cameraErrorMessage = e.message ?: "Camera unavailable"
                             }
                         }, ContextCompat.getMainExecutor(ctx))
 
@@ -172,7 +182,7 @@ fun CameraQrScannerDialog(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Top Bar
+                    // Top Action Bar
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -190,68 +200,106 @@ fun CameraQrScannerDialog(
                         }
 
                         Text(
-                            text = "Scan Receiver QR Code",
+                            text = "Scan Pairing QR Code",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
 
-                        IconButton(
-                            onClick = { showManualInput = !showManualInput },
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.6f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Flashlight Toggle
+                            IconButton(
+                                onClick = {
+                                    val newState = !isFlashOn
+                                    isFlashOn = newState
+                                    cameraControl?.enableTorch(newState)
+                                },
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.6f))
                         ) {
-                            Icon(imageVector = Icons.Default.Keyboard, contentDescription = "Manual IP", tint = NovaPrimary)
+                                Icon(
+                                    imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                    contentDescription = "Flashlight",
+                                    tint = if (isFlashOn) Color.Yellow else Color.White
+                                )
+                            }
+
+                            // Manual IP Input Toggle
+                            IconButton(
+                                onClick = { showManualInput = !showManualInput },
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.6f))
+                            ) {
+                                Icon(imageVector = Icons.Default.Keyboard, contentDescription = "Manual IP", tint = NovaPrimary)
+                            }
                         }
                     }
 
-                    // Target Viewfinder Square
+                    // Viewfinder Target Frame
                     Box(
                         modifier = Modifier
                             .size(240.dp)
                             .clip(RoundedCornerShape(24.dp))
-                            .border(3.dp, NovaPrimary, RoundedCornerShape(24.dp))
-                            .background(Color.Black.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.TopCenter
+                            .border(2.dp, NovaPrimary, RoundedCornerShape(24.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        // Animated Scanning Line
-                        Box(
-                            modifier = Modifier
-                                .offset(y = laserY.dp)
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .background(NovaPrimary)
-                        )
+                        if (cameraErrorMessage != null) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Warning, contentDescription = "Camera Error", tint = NovaWarning, modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Camera Preview Failed", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Use manual IP input below", color = NovaTextMuted, fontSize = 11.sp)
+                            }
+                        } else {
+                            // Scanning laser line
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(2.dp)
+                                    .offset(y = (laserY - 110).dp)
+                                    .background(NovaPrimary)
+                            )
+                        }
                     }
 
-                    // Guidance Text & Manual IP Row
+                    // Bottom Instruction & Manual Controls
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(bottom = 32.dp)
+                        modifier = Modifier.padding(bottom = 24.dp)
                     ) {
                         Text(
-                            text = "Align receiver QR code inside the frame",
-                            color = Color.White.copy(alpha = 0.9f),
+                            text = if (showManualInput) "Direct LAN IP Pairing" else "Align QR code inside the frame",
+                            color = Color.White,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.SemiBold
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Pairs automatically over direct Wi-Fi / Hotspot socket",
+                            color = NovaTextMuted,
+                            fontSize = 11.sp
+                        )
 
-                        if (showManualInput) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        if (showManualInput || cameraErrorMessage != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.Black.copy(alpha = 0.8f))
-                                    .border(1.dp, NovaPrimary, RoundedCornerShape(16.dp))
+                                    .background(NovaDarkSurface.copy(alpha = 0.95f))
                                     .padding(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedTextField(
                                     value = manualIpText,
                                     onValueChange = { manualIpText = it },
-                                    placeholder = { Text("Enter IP e.g. 192.168.1.100", color = Color.Gray, fontSize = 12.sp) },
+                                    placeholder = { Text("Receiver IP e.g. 192.168.1.100", color = Color.Gray, fontSize = 12.sp) },
                                     modifier = Modifier.weight(1f),
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
@@ -269,21 +317,8 @@ fun CameraQrScannerDialog(
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary)
                                 ) {
-                                    Text("Pair", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
+                                    Text("Connect", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
                                 }
-                            }
-                        } else {
-                            Button(
-                                onClick = {
-                                    val localIp = NetworkUtils.getLocalIpAddress(context)
-                                    onQrScanned("NOVASHARE_P2P:v2;IP=$localIp;PORT=8888;NAME=Nearby Phone;TOKEN=mock_tok;PIN=123456")
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = NovaPrimary.copy(alpha = 0.85f)),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan Now", tint = NovaOnPrimary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Auto-Pair & Connect", color = NovaOnPrimary, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

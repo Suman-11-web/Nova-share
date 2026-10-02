@@ -96,16 +96,16 @@ fun ReceiveScreen(
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh Connectivity", tint = NovaPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NovaDarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = NovaDarkBackground
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Connectivity Status Banner (Wi-Fi & Bluetooth)

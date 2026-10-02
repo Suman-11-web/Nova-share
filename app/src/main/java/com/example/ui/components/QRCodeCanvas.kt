@@ -1,106 +1,136 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.Canvas
+import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ui.theme.NovaDarkOutline
+import com.example.ui.theme.NovaDarkSurface
 import com.example.ui.theme.NovaPrimary
-import com.example.ui.theme.NovaSecondary
-import kotlin.math.abs
+import com.example.ui.theme.NovaTextSecondary
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * Generates an authentic, standard QR Code Bitmap using ZXing
+ * with error correction, quiet zone, and high contrast for instantaneous camera scanning.
+ */
+suspend fun generateStandardQrBitmap(
+    content: String,
+    sizePx: Int = 512
+): Bitmap = withContext(Dispatchers.Default) {
+    if (content.isBlank()) {
+        val emptyBitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        emptyBitmap.eraseColor(AndroidColor.WHITE)
+        return@withContext emptyBitmap
+    }
+
+    try {
+        val hints = mapOf(
+            EncodeHintType.CHARACTER_SET to "UTF-8",
+            EncodeHintType.MARGIN to 1,
+            EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M
+        )
+        val bitMatrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, hints)
+        val width = bitMatrix.width
+        val height = bitMatrix.height
+        val pixels = IntArray(width * height)
+
+        for (y in 0 until height) {
+            val offset = y * width
+            for (x in 0 until width) {
+                pixels[offset + x] = if (bitMatrix.get(x, y)) {
+                    AndroidColor.BLACK
+                } else {
+                    AndroidColor.WHITE
+                }
+            }
+        }
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+        bitmap
+    } catch (e: Exception) {
+        val fallback = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        fallback.eraseColor(AndroidColor.WHITE)
+        fallback
+    }
+}
 
 @Composable
 fun QRCodeCanvas(
     qrContent: String,
     modifier: Modifier = Modifier,
     size: Dp = 210.dp,
-    foregroundColor: Color = Color.White,
-    backgroundColor: Color = Color(0xFF0F172A)
+    foregroundColor: Color = Color.Black,
+    backgroundColor: Color = Color.White
 ) {
+    var qrBitmap by remember(qrContent) { mutableStateOf<Bitmap?>(null) }
+    var isGenerating by remember(qrContent) { mutableStateOf(true) }
+
+    LaunchedEffect(qrContent) {
+        isGenerating = true
+        qrBitmap = generateStandardQrBitmap(qrContent, 512)
+        isGenerating = false
+    }
+
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(24.dp))
-            .background(backgroundColor)
-            .border(2.dp, NovaPrimary.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
-            .padding(18.dp),
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White)
+            .border(2.5.dp, NovaPrimary.copy(alpha = 0.8f), RoundedCornerShape(20.dp))
+            .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val canvasWidth = this.size.width
-            val canvasHeight = this.size.height
-            val canvasSize = minOf(canvasWidth, canvasHeight)
-            val gridCount = 21 // Standard QR Version 1 grid size
-            val cellSize = canvasSize / gridCount
-
-            // Hash the string to deterministically generate modules for display
-            val hash = abs(qrContent.hashCode())
-
-            // Render Modules
-            for (row in 0 until gridCount) {
-                for (col in 0 until gridCount) {
-                    // Skip Corner Finder Patterns (7x7 zones in 3 corners)
-                    val isTopLeft = row < 7 && col < 7
-                    val isTopRight = row < 7 && col >= gridCount - 7
-                    val isBottomLeft = row >= gridCount - 7 && col < 7
-
-                    if (!isTopLeft && !isTopRight && !isBottomLeft) {
-                        val bitIndex = (row * gridCount + col) % 31
-                        val isFilled = ((hash shr bitIndex) and 1) == 1 || ((row * 2 + col * 3) % 5 == 0)
-                        if (isFilled) {
-                            drawRoundRect(
-                                color = foregroundColor,
-                                topLeft = Offset(col * cellSize + cellSize * 0.05f, row * cellSize + cellSize * 0.05f),
-                                size = Size(cellSize * 0.9f, cellSize * 0.9f),
-                                cornerRadius = CornerRadius(cellSize * 0.25f)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Draw Standard Modern QR Finder Patterns (Top-Left, Top-Right, Bottom-Left)
-            fun drawFinderPattern(startCol: Int, startRow: Int) {
-                val startX = startCol * cellSize
-                val startY = startRow * cellSize
-                val patternSize = 7 * cellSize
-
-                // Outer Frame
-                drawRoundRect(
+        if (isGenerating || qrBitmap == null) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(36.dp),
                     color = NovaPrimary,
-                    topLeft = Offset(startX, startY),
-                    size = Size(patternSize, patternSize),
-                    cornerRadius = CornerRadius(cellSize * 1.2f)
+                    strokeWidth = 3.dp
                 )
-                // Inner Gap
-                drawRoundRect(
-                    color = backgroundColor,
-                    topLeft = Offset(startX + cellSize, startY + cellSize),
-                    size = Size(patternSize - 2 * cellSize, patternSize - 2 * cellSize),
-                    cornerRadius = CornerRadius(cellSize * 0.8f)
-                )
-                // Core Square
-                drawRoundRect(
-                    color = NovaSecondary,
-                    topLeft = Offset(startX + 2 * cellSize, startY + 2 * cellSize),
-                    size = Size(patternSize - 4 * cellSize, patternSize - 4 * cellSize),
-                    cornerRadius = CornerRadius(cellSize * 0.5f)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Generating QR...",
+                    color = Color.DarkGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
-
-            drawFinderPattern(0, 0)
-            drawFinderPattern(gridCount - 7, 0)
-            drawFinderPattern(0, gridCount - 7)
+        } else {
+            qrBitmap?.let { bmp ->
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = "Standard Pairing QR Code",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }

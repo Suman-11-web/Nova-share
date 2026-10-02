@@ -21,7 +21,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val deviceName: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_DEVICE_NAME] ?: android.os.Build.MODEL
+        prefs[KEY_DEVICE_NAME] ?: com.example.util.DeviceFinderEngine.resolveDeviceName(context)
     }
 
     val themeMode: Flow<AppThemeMode> = context.dataStore.data.map { prefs ->

@@ -16,29 +16,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.network.NetworkUtils
-import com.example.ui.theme.NovaDarkOutline
-import com.example.ui.theme.NovaDarkSurface
-import com.example.ui.theme.NovaDarkSurfaceVariant
-import com.example.ui.theme.NovaPrimary
-import com.example.ui.theme.NovaSecondary
-import com.example.ui.theme.NovaSuccess
-import com.example.ui.theme.NovaTertiary
-import com.example.ui.theme.NovaTextMuted
-import com.example.ui.theme.NovaTextPrimary
-import com.example.ui.theme.NovaTextSecondary
-import com.example.ui.theme.NovaWarning
+import com.example.ui.theme.*
+import com.example.util.RealDeviceStorage
 
 @Composable
 fun StorageBar(
-    usedBytes: Long = 48L * 1024 * 1024 * 1024,
-    totalBytes: Long = 128L * 1024 * 1024 * 1024,
-    imagesBytes: Long = 12L * 1024 * 1024 * 1024,
-    videosBytes: Long = 20L * 1024 * 1024 * 1024,
-    audioBytes: Long = 4L * 1024 * 1024 * 1024,
-    docsBytes: Long = 3L * 1024 * 1024 * 1024,
+    storage: RealDeviceStorage?,
     modifier: Modifier = Modifier
 ) {
-    val usedRatio = (usedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+    val total = storage?.totalBytes ?: (64L * 1024 * 1024 * 1024)
+    val used = storage?.usedBytes ?: (20L * 1024 * 1024 * 1024)
+    val images = storage?.imagesBytes ?: 0L
+    val videos = storage?.videosBytes ?: 0L
+    val audio = storage?.audioBytes ?: 0L
+    val docs = storage?.docsBytes ?: 0L
+    val other = storage?.otherBytes ?: (used - images - videos - audio - docs).coerceAtLeast(0L)
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -58,7 +50,7 @@ fun StorageBar(
                     fontSize = 15.sp
                 )
                 Text(
-                    text = "${NetworkUtils.formatFileSize(usedBytes)} used of ${NetworkUtils.formatFileSize(totalBytes)}",
+                    text = "${NetworkUtils.formatFileSize(used)} used of ${NetworkUtils.formatFileSize(total)}",
                     color = NovaTextSecondary,
                     fontSize = 12.sp
                 )
@@ -74,34 +66,39 @@ fun StorageBar(
                     .clip(RoundedCornerShape(5.dp))
                     .background(NovaDarkSurfaceVariant)
             ) {
+                val imgWeight = (images.toFloat() / total.toFloat()).coerceAtLeast(0.02f)
+                val vidWeight = (videos.toFloat() / total.toFloat()).coerceAtLeast(0.02f)
+                val audWeight = (audio.toFloat() / total.toFloat()).coerceAtLeast(0.02f)
+                val docWeight = (docs.toFloat() / total.toFloat()).coerceAtLeast(0.02f)
+                val othWeight = (other.toFloat() / total.toFloat()).coerceAtLeast(0.05f)
+
                 Box(
                     modifier = Modifier
-                        .weight((imagesBytes.toFloat() / totalBytes.toFloat()).coerceAtLeast(0.01f))
+                        .weight(imgWeight)
                         .fillMaxHeight()
                         .background(NovaPrimary)
                 )
                 Box(
                     modifier = Modifier
-                        .weight((videosBytes.toFloat() / totalBytes.toFloat()).coerceAtLeast(0.01f))
+                        .weight(vidWeight)
                         .fillMaxHeight()
                         .background(NovaSecondary)
                 )
                 Box(
                     modifier = Modifier
-                        .weight((audioBytes.toFloat() / totalBytes.toFloat()).coerceAtLeast(0.01f))
+                        .weight(audWeight)
                         .fillMaxHeight()
                         .background(NovaTertiary)
                 )
                 Box(
                     modifier = Modifier
-                        .weight((docsBytes.toFloat() / totalBytes.toFloat()).coerceAtLeast(0.01f))
+                        .weight(docWeight)
                         .fillMaxHeight()
                         .background(NovaSuccess)
                 )
-                val otherBytes = (usedBytes - imagesBytes - videosBytes - audioBytes - docsBytes).coerceAtLeast(0)
                 Box(
                     modifier = Modifier
-                        .weight((otherBytes.toFloat() / totalBytes.toFloat()).coerceAtLeast(0.01f))
+                        .weight(othWeight)
                         .fillMaxHeight()
                         .background(NovaWarning)
                 )
@@ -109,23 +106,23 @@ fun StorageBar(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Storage Category Legend
+            // Storage Category Legend with actual sizes
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                StorageLegendItem(label = "Images", color = NovaPrimary)
-                StorageLegendItem(label = "Videos", color = NovaSecondary)
-                StorageLegendItem(label = "Audio", color = NovaTertiary)
-                StorageLegendItem(label = "Docs", color = NovaSuccess)
-                StorageLegendItem(label = "Other", color = NovaWarning)
+                StorageLegendItem(label = "Images", size = images, color = NovaPrimary)
+                StorageLegendItem(label = "Videos", size = videos, color = NovaSecondary)
+                StorageLegendItem(label = "Audio", size = audio, color = NovaTertiary)
+                StorageLegendItem(label = "Docs", size = docs, color = NovaSuccess)
+                StorageLegendItem(label = "Other", size = other, color = NovaWarning)
             }
         }
     }
 }
 
 @Composable
-private fun StorageLegendItem(label: String, color: Color) {
+private fun StorageLegendItem(label: String, size: Long, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
@@ -134,6 +131,11 @@ private fun StorageLegendItem(label: String, color: Color) {
                 .background(color)
         )
         Spacer(modifier = Modifier.width(4.dp))
-        Text(text = label, color = NovaTextSecondary, fontSize = 11.sp)
+        Column {
+            Text(text = label, color = NovaTextSecondary, fontSize = 11.sp)
+            if (size > 0) {
+                Text(text = NetworkUtils.formatFileSize(size), color = NovaTextMuted, fontSize = 9.sp)
+            }
+        }
     }
 }

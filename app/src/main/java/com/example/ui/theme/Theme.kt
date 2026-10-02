@@ -89,13 +89,19 @@ fun NovaShareTheme(
     }
 
     val context = LocalContext.current
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colorScheme = when (themeMode) {
+        AppThemeMode.AMOLED -> NovaAmoledColorScheme
+        AppThemeMode.DARK -> NovaDarkColorScheme
+        AppThemeMode.LIGHT -> NovaLightColorScheme
+        AppThemeMode.SYSTEM -> {
+            if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            } else if (darkTheme) {
+                NovaDarkColorScheme
+            } else {
+                NovaLightColorScheme
+            }
         }
-        themeMode == AppThemeMode.AMOLED -> NovaAmoledColorScheme
-        darkTheme -> NovaDarkColorScheme
-        else -> NovaLightColorScheme
     }
 
     MaterialTheme(

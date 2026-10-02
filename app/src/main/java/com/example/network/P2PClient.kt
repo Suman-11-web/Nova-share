@@ -1,5 +1,6 @@
 package com.example.network
 
+import android.content.Context
 import android.util.Log
 import com.example.data.model.SharedFile
 import com.example.data.model.TransferSession
@@ -8,6 +9,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
@@ -17,6 +19,7 @@ class P2PClient(
     private val targetIp: String,
     private val targetPort: Int = 8888,
     private val filesToSend: List<SharedFile>,
+    private val context: Context? = null,
     private val onProgress: (TransferSession) -> Unit
 ) {
     private val executor = Executors.newSingleThreadExecutor()
@@ -82,13 +85,20 @@ class P2PClient(
                         return@execute
                     }
 
-                    val srcFile = File(file.path)
-                    if (srcFile.exists()) {
-                        val fis = FileInputStream(srcFile)
+                    val inStream: InputStream? = if (file.uri != null) {
+                        try { context?.contentResolver?.openInputStream(file.uri) } catch (_: Exception) { null }
+                    } else if (file.path.startsWith("content://")) {
+                        try { context?.contentResolver?.openInputStream(android.net.Uri.parse(file.path)) } catch (_: Exception) { null }
+                    } else {
+                        val srcFile = File(file.path)
+                        if (srcFile.exists()) FileInputStream(srcFile) else null
+                    }
+
+                    if (inStream != null) {
                         val buffer = ByteArray(32768)
                         var read: Int
 
-                        while (fis.read(buffer).also { read = it } != -1) {
+                        while (inStream.read(buffer).also { read = it } != -1) {
                             if (isCancelled) break
                             dataOut.write(buffer, 0, read)
                             overallSent += read
@@ -104,29 +114,9 @@ class P2PClient(
                             session.etaSeconds = eta
                             onProgress(session)
                         }
-                        fis.close()
+                        inStream.close()
                     } else {
-                        // If file was loaded via URI or mock stream, generate simulated payload bytes equal to file.size
-                        val buffer = ByteArray(32768)
-                        var fileSent = 0L
-                        while (fileSent < file.size) {
-                            if (isCancelled) break
-                            val chunk = Math.min(buffer.size.toLong(), file.size - fileSent).toInt()
-                            dataOut.write(buffer, 0, chunk)
-                            fileSent += chunk
-                            overallSent += chunk
-
-                            val now = System.currentTimeMillis()
-                            val elapsedSec = Math.max(1, (now - startTime) / 1000)
-                            val speed = overallSent / elapsedSec
-                            val eta = if (speed > 0) (totalSize - overallSent) / speed else 0
-
-                            session.bytesTransferred = overallSent
-                            session.speedBytesPerSec = speed
-                            session.etaSeconds = eta
-                            onProgress(session)
-                            Thread.sleep(10)
-                        }
+                        throw java.io.IOException("Cannot read stream for file ${file.name}")
                     }
                     dataOut.flush()
                 }

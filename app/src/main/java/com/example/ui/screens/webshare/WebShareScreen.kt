@@ -49,16 +49,16 @@ fun WebShareScreen(
         topBar = {
             TopAppBar(
                 title = { Text(text = "Web Share (Phone ↔ PC)", fontWeight = FontWeight.ExtraBold, color = NovaTextPrimary) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NovaDarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = NovaDarkBackground
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Server Toggle Banner
